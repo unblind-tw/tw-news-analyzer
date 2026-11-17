@@ -1,4 +1,5 @@
 import streamlit as st
+import altair as alt
 import json
 import os
 import re
@@ -284,16 +285,49 @@ else:
             if parsed_dts:
                 min_dt, max_dt = min(parsed_dts), max(parsed_dts)
                 dt_counts = Counter(parsed_dts)
-                line_data = {}
+                chart_values = []
                 curr_dt = min_dt
+                idx = 0
                 while curr_dt <= max_dt:
                     if min_dt.date() == max_dt.date():
                         label = curr_dt.strftime("%H:00")
                     else:
                         label = curr_dt.strftime("%m/%d %H:00")
-                    line_data[label] = dt_counts.get(curr_dt, 0)
+                    chart_values.append({
+                        "time": label,
+                        "count": dt_counts.get(curr_dt, 0),
+                        "order": idx
+                    })
                     curr_dt += timedelta(hours=1)
-                st.line_chart(line_data, height=195, color="#3b82f6")
+                    idx += 1
+
+                # 繪製固定座標、水平時間標籤且鎖定滾輪縮放的折線圖
+                line_chart = (
+                    alt.Chart(alt.Data(values=chart_values))
+                    .mark_line(point=True, color="#3b82f6", strokeWidth=3)
+                    .encode(
+                        x=alt.X(
+                            "time:N",
+                            sort=alt.EncodingSortField(field="order", order="ascending"),
+                            axis=alt.Axis(
+                                labelAngle=0,
+                                labelOverlap=True,
+                                title=None
+                            )
+                        ),
+                        y=alt.Y(
+                            "count:Q",
+                            scale=alt.Scale(domainMin=0),
+                            axis=alt.Axis(title=None, tickMinStep=1)
+                        ),
+                        tooltip=[
+                            alt.Tooltip("time:N", title="時段"),
+                            alt.Tooltip("count:Q", title="發稿篇數")
+                        ]
+                    )
+                    .properties(height=195)
+                )
+                st.altair_chart(line_chart, use_container_width=True)
             else:
                 st.info("尚無足夠時間戳記繪製圖表")
 
