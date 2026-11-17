@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 st.set_page_config(
     page_title="政治解盲 | 還原無偏見的純淨事實",
-    page_icon="⚖️",  # 可以換成代表公正的天平 ⚖️ 或掃描的放大鏡 🔍
+    page_icon="🔍",  # 可以換成代表公正的天平 ⚖️ 或掃描的放大鏡 🔍
     layout="wide"
 )
 
@@ -134,7 +134,7 @@ def parse_report_data(report_md):
     }
 
 
-st.title("⚖️ 政治解盲")
+st.title("🔍 政治解盲")
 st.caption("每日早（08:00）、中（12:30）、晚（19:00）自動鎖定全台最大政治議題，交叉比對各方媒體，破解同溫層盲區，還原無偏見的純淨事實。")
 
 data_file = "news_history.json"
