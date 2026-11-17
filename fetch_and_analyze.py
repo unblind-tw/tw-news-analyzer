@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
@@ -62,7 +63,6 @@ MEDIA_SPECTRUM = {
 }
 
 def get_media_bias_tag(source_name):
-    """比對媒體名稱，回傳預設光譜標籤"""
     for key, bias_desc in MEDIA_SPECTRUM.items():
         if key in source_name:
             return bias_desc
@@ -72,7 +72,7 @@ def fetch_rss(query, max_items=45):
     encoded = urllib.parse.quote(query)
     url = f"https://news.google.com/rss/search?q={encoded}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
     headers = {"User-Agent": "Mozilla/5.0"}
-    resp = requests.get(url, headers=headers, timeout=15)
+    resp = requests.get(url, headers=headers, timeout=20)
     root = ET.fromstring(resp.content)
     articles = []
     for item in root.findall(".//item")[:max_items]:
@@ -101,11 +101,22 @@ def call_gemini(prompt):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2}
+        "generationConfig": {
+            "temperature": 0.2,
+            "thinkingConfig": {"thinkingBudget": 0}
+        }
     }
-    resp = requests.post(url, json=payload, timeout=90)
-    resp.raise_for_status()
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    for attempt in range(2):
+        try:
+            resp = requests.post(url, json=payload, timeout=300)
+            resp.raise_for_status()
+            return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except requests.exceptions.RequestException as e:
+            if attempt == 0:
+                print(f"連線逾時或異常，5秒後進行第2次重試... ({e})")
+                time.sleep(5)
+            else:
+                raise
 
 def load_history():
     if os.path.exists(DATA_FILE):
@@ -120,13 +131,11 @@ def main():
     if not API_KEY:
         raise ValueError("找不到 GEMINI_API_KEY，請確認已在 GitHub Secrets 設定！")
 
-    # 讀取歷史紀錄，抓出最近 3 期已經分析過的議題（防撞題）
     history = load_history()
     recent_topics = [item["topic"] for item in history[:3]]
     recent_topics_str = "、".join(recent_topics) if recent_topics else "無"
     print(f"近期已分析過的議題：{recent_topics_str}")
 
-    # 階段一：抓取過去 12 小時台灣政治新聞，找出最大議題（若重複則自動遞補第二大）
     broad_query = "(政治 OR 立法院 OR 行政院 OR 總統府 OR 國民黨 OR 民進黨 OR 民眾黨) when:12h"
     pool = fetch_rss(broad_query, max_items=50)
     headlines_text = "\n".join([f"- [{a['source']}] {a['title']}" for a in pool])
@@ -138,17 +147,16 @@ def main():
 我們在前幾期已經分析過以下議題：【{recent_topics_str}】
 
 請依照以下規則選出本期要分析的單一新聞事件：
-1. 先在心中統計出目前報導量最大的前 3 名政治新聞事件。
-2. 優先選擇第 1 名；但如果第 1 名與【{recent_topics_str}】是同一個新聞事件（即使字面用詞略有不同，例如「總預算覆議」與「立院總預算」視為同一事件），請直接排除它，**改選擇報導量第 2 名（或第 3 名）的全新新聞事件**！
-3. 唯一例外：如果舊議題在過去幾小時內發生了「重大結果翻轉」（例如：法案正式三讀通過、官員宣布請辭、法院宣判結果出爐），才允許再次選擇，並請在關鍵字中加上最新進度。
+1. 先統計出目前報導量最大的前 3 名政治新聞事件。
+2. 優先選擇第 1 名；但如果第 1 名與【{recent_topics_str}】是同一個新聞事件（即使字面用詞略有不同），請直接排除它，**改選擇報導量第 2 名（或第 3 名）的全新新聞事件**！
+3. 唯一例外：如果舊議題在過去幾小時內發生了「重大結果翻轉」（例如：法案正式三讀通過、官員請辭、法院宣判結果出爐），才允許再次選擇，並請在關鍵字中加上最新進度。
 
-請只回傳最終選定之事件的「核心搜尋關鍵字」（約 2 到 6 個字，以空白分隔，例如：「財劃法 朝野協商」或「憲法訴訟法 釋憲」），不要加上任何標點符號或解釋文字。
+請只回傳最終選定之事件的「核心搜尋關鍵字」（約 2 到 6 個字，以空白分隔，例如：「財劃法 朝野協商」或「總預算 覆議案」），不要加上任何標點符號或解釋文字。
 """
     hot_topic = call_gemini(topic_prompt).strip().replace('"', '').replace("'", "")
     print(f"鎖定本時段分析議題：{hot_topic}")
 
-    # 階段二：針對該議題深入抓取各家報導，並依「時間戳記」由舊到新排序
-    topic_articles = fetch_rss(f"{hot_topic} when:24h", max_items=35)
+    topic_articles = fetch_rss(f"{hot_topic} when:24h", max_items=30)
     if len(topic_articles) < 5:
         topic_articles = pool[:25]
 
@@ -159,7 +167,6 @@ def main():
         for a in topic_articles
     ])
 
-    # 階段三：結合媒體光譜字典、盲點與時間戳記進行深度分析
     analysis_prompt = f"""
 你是一位專精台灣政治生態與媒體識讀的首席分析師。
 本時段鎖定分析的重大政治新聞議題為：【{hot_topic}】
