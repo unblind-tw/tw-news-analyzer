@@ -13,6 +13,10 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+[data-testid="stToolbar"] { display: none !important; }
+[data-testid="stDecoration"] { display: none !important; }
+#MainMenu { visibility: hidden !important; }
+footer { visibility: hidden !important; }
 .summary-box {
     background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
     border-left: 6px solid #2563eb;
