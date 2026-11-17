@@ -18,63 +18,144 @@ st.markdown("""
 [data-testid="stDecoration"] { display: none !important; }
 #MainMenu { visibility: hidden !important; }
 footer { visibility: hidden !important; }
-[data-testid="stMetricValue"] > div {
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: unset !important;
-    line-height: 1.3 !important;
+
+/* 議題主標題橫幅卡片 */
+.topic-banner {
+    background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #334155;
+    border-left: 6px solid #f97316;
+    border-radius: 12px;
+    padding: 18px 24px;
+    margin-bottom: 16px;
 }
+.topic-label {
+    font-size: 0.9rem;
+    color: #94a3b8;
+    margin-bottom: 4px;
+}
+.topic-title {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1.3;
+    margin-bottom: 8px;
+}
+.topic-meta {
+    display: inline-block;
+    background-color: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* 四大戰情指標獨立卡片（徹底隔開不碰撞） */
+.metric-card {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    height: 100%;
+}
+.metric-head {
+    font-size: 0.88rem;
+    color: #94a3b8;
+    margin-bottom: 8px;
+}
+.metric-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1.3;
+    margin-bottom: 8px;
+    word-break: break-word;
+}
+.metric-sub {
+    display: inline-block;
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
+/* 3秒看懂真相摘要框 */
 .summary-box {
     background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
     border-left: 6px solid #2563eb;
-    padding: 18px 22px;
-    border-radius: 10px;
-    font-size: 1.05rem;
-    line-height: 1.7;
-    color: #1e293b;
-    margin-top: 10px;
-    margin-bottom: 14px;
+    padding: 20px 24px;
+    border-radius: 12px;
+    font-size: 1.08rem;
+    line-height: 1.85;
+    color: #0f172a;
+    margin-top: 6px;
+    margin-bottom: 22px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
+
+/* 當事人表態對照卡 */
 .stance-card {
     background-color: #1e293b;
     border: 1px solid #334155;
     border-top: 4px solid #3b82f6;
     border-radius: 10px;
-    padding: 14px 16px;
-    margin-bottom: 12px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
     color: #f8fafc;
+    min-height: 125px;
 }
 .stance-title {
     font-weight: 700;
-    font-size: 1rem;
-    margin-bottom: 6px;
+    font-size: 1.02rem;
+    margin-bottom: 8px;
     color: #93c5fd;
 }
 .stance-body {
-    font-size: 0.93rem;
-    line-height: 1.55;
+    font-size: 0.95rem;
+    line-height: 1.65;
     color: #e2e8f0;
 }
-.blindspot-blue {
-    background-color: #eff6ff;
-    border-top: 5px solid #2563eb;
-    padding: 18px;
-    border-radius: 10px;
-    color: #1e293b;
+
+/* 同溫層盲點整合式卡片 */
+.blind-card-blue {
+    background-color: #172554;
+    border: 1px solid #1e40af;
+    border-top: 5px solid #3b82f6;
+    padding: 20px 22px;
+    border-radius: 12px;
+    color: #eff6ff;
+    line-height: 1.8;
+    margin-bottom: 16px;
 }
-.blindspot-green {
-    background-color: #f0fdf4;
-    border-top: 5px solid #16a34a;
-    padding: 18px;
-    border-radius: 10px;
-    color: #1e293b;
+.blind-card-green {
+    background-color: #052e16;
+    border: 1px solid #166534;
+    border-top: 5px solid #22c55e;
+    padding: 20px 22px;
+    border-radius: 12px;
+    color: #f0fdf4;
+    line-height: 1.8;
+    margin-bottom: 16px;
 }
+.blind-item {
+    background-color: rgba(255, 255, 255, 0.06);
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-top: 10px;
+    font-size: 0.96rem;
+    line-height: 1.7;
+}
+
+/* 光譜比例尺 */
 .spectrum-bar {
     display: flex;
-    height: 34px;
-    border-radius: 17px;
+    height: 36px;
+    border-radius: 18px;
     overflow: hidden;
-    margin: 12px 0;
+    margin: 14px 0;
 }
 .spectrum-segment {
     display: flex;
@@ -82,8 +163,9 @@ footer { visibility: hidden !important; }
     justify-content: center;
     color: white;
     font-weight: 700;
-    font-size: 0.88rem;
+    font-size: 0.86rem;
     white-space: nowrap;
+    overflow: hidden;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -121,7 +203,6 @@ def classify_camp(source_item):
 
 
 def calc_emotion_metric(sources):
-    """計算標題情緒煽動度（溫度計）"""
     if not sources:
         return "0%", "🟢 平實陳述為主"
     hit_count = 0
@@ -131,18 +212,17 @@ def calc_emotion_metric(sources):
             hit_count += 1
     ratio = round(hit_count / len(sources) * 100)
     if ratio >= 50:
-        label = f"🔴 高度煽動（{hit_count}篇含情緒字眼）"
+        label = f"🔴 高度煽動（{hit_count}篇含情緒詞）"
     elif ratio >= 25:
-        label = f"🟡 攻防激烈（{hit_count}篇含情緒字眼）"
+        label = f"🟡 攻防激烈（{hit_count}篇含情緒詞）"
     else:
         label = f"🟢 平實陳述（僅{hit_count}篇含情緒詞）"
     return f"{ratio}% 煽動度", label
 
 
 def detect_agenda_leader(current, parsed, camp_counts):
-    """判定議題主導陣營（誰在設定戰場）"""
     report_text = current.get("report", "")
-    m = re.search(r"【議題主導陣營】[：:\s\*]*(.+?)(?:\n|$)", report_text)
+    m = re.search(r"【議題主導陣營】[：:\s\*]*(.+?)(?:\n|\*\*【|$)", report_text)
     if m:
         raw = m.group(1).strip().strip("*")
         parts = raw.split("｜") if "｜" in raw else [raw, "主導本時段輿論攻防"]
@@ -164,9 +244,9 @@ def detect_agenda_leader(current, parsed, camp_counts):
         return "🟦⬜ 藍白雙邊交鋒", "藍白陣營互動成輿論焦點"
     if "拉鋸" in sec1 or (has_blue and has_green):
         if n_blue > n_green + 3:
-            return "🟦 藍營主導戰場", "在野拋出議題・執政黨防守反擊"
+            return "🟦 藍營主導戰場", "在野拋出議題・執政防守反擊"
         if n_green > n_blue + 3:
-            return "🟩 綠營主導戰場", "執政陣營強勢定調・在野攻防"
+            return "🟩 綠營主導戰場", "執政強勢定調・在野攻防"
         return "⚔️ 朝野攻防拉鋸", "藍綠雙方陣營互有攻守"
     if n_green >= n_blue * 1.5 and n_green > 5:
         return "🟩 泛綠主導戰場", "綠營媒體高密度發動議題"
@@ -176,20 +256,20 @@ def detect_agenda_leader(current, parsed, camp_counts):
 
 
 def extract_stances(current, parsed):
-    """萃取當事人表態對照卡（支援新舊報告格式）"""
     report_text = current.get("report", "")
     stances = []
 
-    # 優先讀取結構化表態區塊
     block_m = re.search(
-        r"【當事人表態對照】(.*?)(?=\n###|\n---|\Z)",
+        r"【當事人表態對照】[：:\s\*]*(.*?)(?=\n###|\n---|\Z)",
         report_text,
         re.DOTALL
     )
     if block_m:
-        lines = block_m.group(1).strip().split("\n")
-        for line in lines:
-            line = line.strip().lstrip("*-• ")
+        raw_block = block_m.group(1).strip()
+        # 支援單行或多行星號切割
+        items = re.split(r"(?:\n\s*[\*\-•]\s*|\s+\*\s+)", raw_block)
+        for item in items:
+            line = item.strip().lstrip("*-• ").strip("*")
             if "：" in line or ":" in line:
                 sep = "：" if "：" in line else ":"
                 actor, quote = line.split(sep, 1)
@@ -200,13 +280,12 @@ def extract_stances(current, parsed):
         if stances:
             return stances[:4]
 
-    # 舊報告自動從摘要與內文智慧拆解當事人立場
     summary = parsed.get("summary", "")
     sentences = [s.strip() for s in re.split(r"[。；]", summary) if len(s.strip()) > 6]
 
     actor_rules = [
         ("🟦 國民黨／藍營立場", ["國民黨", "藍營", "蔣萬安", "韓國瑜"]),
-        ("🟩 行政院／執政立場", ["行政院長", "卓榮泰", "行政院", "民進黨", "賴清德", "總統府"]),
+        ("🟩 行政院／綠營立場", ["行政院長", "卓榮泰", "行政院", "民進黨", "賴清德", "沈伯洋"]),
         ("⬜ 民眾黨／白營立場", ["民眾黨", "柯文哲", "黃國昌", "白營"]),
         ("🏛️ 主管機關／院會進度", ["財政部", "立法院", "朝野協商", "院會"])
     ]
@@ -223,7 +302,6 @@ def extract_stances(current, parsed):
         if matched_parts:
             stances.append((label, "。".join(matched_parts) + "。"))
 
-    # 若摘要為同一事件中兩位主角交鋒（如柯文哲與蔣萬安），按句子拆分
     if len(stances) < 2 and sentences:
         stances = []
         for sent in sentences[:3]:
@@ -237,11 +315,32 @@ def extract_stances(current, parsed):
     return stances[:3]
 
 
+def format_blindspot_items(raw_text):
+    """將盲點文字拆解為獨立條列區塊，不再擠成一團"""
+    if not raw_text:
+        return ""
+    cleaned = re.sub(r"^這群讀者.*?(?:看不見|錯過)[：:\s]*", "", raw_text.strip())
+    parts = re.split(r"(?:\n\s*[\*\-•]\s*|\s+\*\s+)", cleaned)
+    parts = [p.strip().strip("*") for p in parts if len(p.strip().strip("*")) > 4]
+
+    if len(parts) == 1 and "。" in parts[0]:
+        sents = [s.strip() + "。" for s in parts[0].split("。") if len(s.strip()) > 6]
+        if len(sents) > 1:
+            parts = sents
+
+    html_items = "".join([f'<div class="blind-item">• {p}</div>' for p in parts])
+    return html_items
+
+
 def parse_report_data(report_md):
     cleaned = re.sub(r"^好的，.*?\n+", "", report_md.strip())
 
+    # 精準擷取摘要：遇到【議題主導陣營】或【當事人表態對照】立即停止，絕不吸進後續文字
     summary = ""
-    sum_pattern = r"【中立客觀事實摘要】[：:\s\*]*(.+?)(?=\n---|\n###|\n\n|\n【)"
+    sum_pattern = (
+        r"【中立客觀事實摘要】[：:\s\*]*(.+?)"
+        r"(?=\s*\*{0,2}【議題主導陣營】|\s*\*{0,2}【當事人表態對照】|\n---|\n###|\n\n)"
+    )
     sum_match = re.search(sum_pattern, cleaned, re.DOTALL)
     if sum_match:
         summary = sum_match.group(1).strip().strip("*")
@@ -334,38 +433,64 @@ else:
         else:
             first_source = {"source": "無", "time_str": "無", "title": ""}
 
-        # 第一行：完整露出本時段最大議題標題
-        st.metric(
-            "🔥 本時段最大議題",
-            current["topic"],
-            f"{current['period']}｜{current['date_str']}（跨媒體比對 {current['article_count']} 篇報導）"
-        )
+        # 第一排：獨立橫幅卡片顯示本時段最大議題
+        st.markdown(f"""
+        <div class="topic-banner">
+            <div class="topic-label">🔥 本時段最大政治議題</div>
+            <div class="topic-title">{current["topic"]}</div>
+            <span class="topic-meta">
+                📅 {current["period"]}｜{current["date_str"]}（跨媒體比對 {current["article_count"]} 篇報導）
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
-        # 第二行：四大戰情指標（可靠度、情緒溫度計、主導陣營、最早首發）
+        # 第二排：四大戰情指標（各自獨立邊框卡片，絕不擠在一起）
+        score = parsed["score"]
+        if score >= 75:
+            score_label = "🟢 高可靠度（具名事實為主）"
+        elif score >= 60:
+            score_label = "🟡 中等（夾雜政黨推論）"
+        else:
+            score_label = "🔴 偏低（多匿名放話／帶風向）"
+
+        emo_val, emo_label = calc_emotion_metric(sources)
+        leader_val, leader_label = detect_agenda_leader(current, parsed, camp_counts)
+
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            score = parsed["score"]
-            if score >= 75:
-                score_label = "高可靠度（具名事實為主）"
-            elif score >= 60:
-                score_label = "中等（夾雜政黨推論）"
-            else:
-                score_label = "偏低（多匿名放話／帶風向）"
-            st.metric("🛡️ 消息來源可靠度", f"{score} / 100 分", score_label)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-head">🛡️ 消息來源可靠度</div>
+                <div class="metric-val">{score} / 100 分</div>
+                <div class="metric-sub">{score_label}</div>
+            </div>
+            """, unsafe_allow_html=True)
         with c2:
-            emo_val, emo_label = calc_emotion_metric(sources)
-            st.metric("🎭 標題情緒煽動度", emo_val, emo_label)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-head">🎭 標題情緒煽動度</div>
+                <div class="metric-val">{emo_val}</div>
+                <div class="metric-sub">{emo_label}</div>
+            </div>
+            """, unsafe_allow_html=True)
         with c3:
-            leader_val, leader_label = detect_agenda_leader(current, parsed, camp_counts)
-            st.metric("📣 議題主導陣營", leader_val, leader_label)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-head">📣 議題主導陣營</div>
+                <div class="metric-val">{leader_val}</div>
+                <div class="metric-sub">{leader_label}</div>
+            </div>
+            """, unsafe_allow_html=True)
         with c4:
-            st.metric(
-                "🥇 最早首發媒體",
-                first_source["source"],
-                f"首發時間：{first_source['time_str'][-5:]}"
-            )
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-head">🥇 最早首發媒體</div>
+                <div class="metric-val">{first_source["source"]}</div>
+                <div class="metric-sub">🕒 首發時間：{first_source["time_str"][-5:]}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        # 中立事實 3 秒快讀區
+        # 第三排：純淨版中立事實 3 秒快讀區
         if parsed["summary"]:
             st.markdown(f"""
             <div class="summary-box">
@@ -374,18 +499,18 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-        # 當事人表態對照卡
+        # 第四排：當事人表態對照卡
         stances = extract_stances(current, parsed)
         if stances:
             st.markdown("##### 🗣️ 當事人與各方核心表態對照")
             s_cols = st.columns(len(stances))
             for idx, (actor, quote) in enumerate(stances):
                 border_color = "#3b82f6"
-                if "綠" in actor or "政院" in actor or "民進黨" in actor:
+                if any(w in actor for w in ["綠", "政院", "民進黨", "沈伯洋", "卓榮泰", "賴清德"]):
                     border_color = "#22c55e"
-                elif "白" in actor or "柯" in actor or "民眾黨" in actor:
+                elif any(w in actor for w in ["白", "柯", "民眾黨", "黃國昌"]):
                     border_color = "#06b6d4"
-                elif "機關" in actor or "院會" in actor or "動態" in actor:
+                elif any(w in actor for w in ["機關", "院會", "動態", "財政部"]):
                     border_color = "#eab308"
                 with s_cols[idx]:
                     st.markdown(f"""
@@ -395,6 +520,7 @@ else:
                     </div>
                     """, unsafe_allow_html=True)
 
+        st.write("")
         col_left, col_right = st.columns([1.35, 1])
 
         with col_left:
@@ -411,36 +537,43 @@ else:
             p_neutral = round(n_neutral / total * 100)
             p_green = max(0, 100 - p_blue - p_white - p_neutral)
 
+            def seg_label(name, pct):
+                if pct >= 14:
+                    return f"{name} {pct}%"
+                if pct >= 6:
+                    return f"{pct}%"
+                return ""
+
             segments = []
             if p_blue > 0:
                 segments.append(
                     f'<div class="spectrum-segment" style="width:{p_blue}%;'
-                    f'background:#2563eb;">🟦 泛藍 {p_blue}%</div>'
+                    f'background:#2563eb;">{seg_label("🟦 泛藍", p_blue)}</div>'
                 )
             if p_white > 0:
                 segments.append(
                     f'<div class="spectrum-segment" style="width:{p_white}%;'
-                    f'background:#06b6d4;">⬜ 泛白 {p_white}%</div>'
+                    f'background:#06b6d4;">{seg_label("⬜ 泛白", p_white)}</div>'
                 )
             if p_neutral > 0:
                 segments.append(
                     f'<div class="spectrum-segment" style="width:{p_neutral}%;'
-                    f'background:#64748b;">🟨 中立與綜合 {p_neutral}%</div>'
+                    f'background:#64748b;">{seg_label("🟨 中立與綜合", p_neutral)}</div>'
                 )
             if p_green > 0:
                 segments.append(
                     f'<div class="spectrum-segment" style="width:{p_green}%;'
-                    f'background:#16a34a;">🟩 泛綠 {p_green}%</div>'
+                    f'background:#16a34a;">{seg_label("🟩 泛綠", p_green)}</div>'
                 )
 
             bar_html = '<div class="spectrum-bar">' + "".join(segments) + '</div>'
             st.markdown(bar_html, unsafe_allow_html=True)
 
             m1, m2, m3, m4 = st.columns(4)
-            m1.caption(f"🟦 **泛藍傾向**：{n_blue} 篇")
-            m2.caption(f"⬜ **泛白傾向**：{n_white} 篇")
-            m3.caption(f"🟨 **中立／綜合**：{n_neutral} 篇")
-            m4.caption(f"🟩 **泛綠傾向**：{n_green} 篇")
+            m1.caption(f"🟦 **泛藍傾向**：{n_blue} 篇 ({p_blue}%)")
+            m2.caption(f"⬜ **泛白傾向**：{n_white} 篇 ({p_white}%)")
+            m3.caption(f"🟨 **中立／綜合**：{n_neutral} 篇 ({p_neutral}%)")
+            m4.caption(f"🟩 **泛綠傾向**：{n_green} 篇 ({p_green}%)")
 
             if p_green >= p_blue * 2 and p_green > 30:
                 st.warning("📢 聲量提示：本時段泛綠媒體報導密集度明顯較高。")
@@ -521,25 +654,27 @@ else:
             if parsed["blue_blind"] and parsed["green_blind"]:
                 b_col, g_col = st.columns(2)
                 with b_col:
-                    st.markdown("""
-                    <div class="blindspot-blue">
-                        <h4>🟦 只看【泛藍／泛白媒體】受眾的盲點</h4>
-                        <p style="font-size:0.9rem;color:#475569;">
-                        以下為執政黨數據、背景或反駁，在藍白媒體中較少被凸顯：
-                        </p>
+                    b_items_html = format_blindspot_items(parsed["blue_blind"])
+                    st.markdown(f"""
+                    <div class="blind-card-blue">
+                        <h4 style="margin:0 0 6px 0; color:#93c5fd;">🟦 只看【泛藍／泛白媒體】受眾的盲點</h4>
+                        <div style="font-size:0.88rem; color:#cbd5e1; margin-bottom:10px;">
+                            以下為執政黨數據、背景或反駁，在藍白媒體中較少被凸顯：
+                        </div>
+                        {b_items_html}
                     </div>
                     """, unsafe_allow_html=True)
-                    st.markdown(parsed["blue_blind"])
                 with g_col:
-                    st.markdown("""
-                    <div class="blindspot-green">
-                        <h4>🟩 只看【泛綠媒體】受眾的盲點</h4>
-                        <p style="font-size:0.9rem;color:#475569;">
-                        以下為在野黨質疑、程序爭議或民意反彈，在綠營媒體中較少被凸顯：
-                        </p>
+                    g_items_html = format_blindspot_items(parsed["green_blind"])
+                    st.markdown(f"""
+                    <div class="blind-card-green">
+                        <h4 style="margin:0 0 6px 0; color:#86efac;">🟩 只看【泛綠媒體】受眾的盲點</h4>
+                        <div style="font-size:0.88rem; color:#cbd5e1; margin-bottom:10px;">
+                            以下為在野黨質疑、程序爭議或民意反彈，在綠營媒體中較少被凸顯：
+                        </div>
+                        {g_items_html}
                     </div>
                     """, unsafe_allow_html=True)
-                    st.markdown(parsed["green_blind"])
             elif parsed["sec2"]:
                 st.markdown(parsed["sec2"])
             else:
