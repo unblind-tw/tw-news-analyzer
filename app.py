@@ -33,7 +33,27 @@ footer { visibility: hidden !important; }
     line-height: 1.7;
     color: #1e293b;
     margin-top: 10px;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
+}
+.stance-card {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    border-top: 4px solid #3b82f6;
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    color: #f8fafc;
+}
+.stance-title {
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 6px;
+    color: #93c5fd;
+}
+.stance-body {
+    font-size: 0.93rem;
+    line-height: 1.55;
+    color: #e2e8f0;
 }
 .blindspot-blue {
     background-color: #eff6ff;
@@ -78,6 +98,14 @@ BLUE_KEYS = [
 ]
 WHITE_KEYS = ["泛白", "民眾", "匯流", "CNEWS"]
 
+SENSATIONAL_WORDS = [
+    "狠酸", "打臉", "翻車", "砲轟", "怒轟", "痛批", "怒批", "嗆", "轟",
+    "驚", "爆", "急了", "傻眼", "洗臉", "跳腳", "開戰", "吵成一團",
+    "鬆一口氣", "強行", "闖關", "黑箱", "自肥", "掏空", "神隱", "打假球",
+    "變調", "鬆口", "大罵", "反擊", "踢爆", "怒斥", "狂酸", "炒不起來",
+    "救", "難發酵", "力拚", "力拼", "破局", "打槍", "切割", "！", "!"
+]
+
 
 def classify_camp(source_item):
     tag = source_item.get("bias_tag", "")
@@ -92,11 +120,128 @@ def classify_camp(source_item):
     return "中立／綜合媒體"
 
 
+def calc_emotion_metric(sources):
+    """計算標題情緒煽動度（溫度計）"""
+    if not sources:
+        return "0%", "🟢 平實陳述為主"
+    hit_count = 0
+    for s in sources:
+        title = s.get("title", "")
+        if any(w in title for w in SENSATIONAL_WORDS):
+            hit_count += 1
+    ratio = round(hit_count / len(sources) * 100)
+    if ratio >= 50:
+        label = f"🔴 高度煽動（{hit_count}篇含情緒字眼）"
+    elif ratio >= 25:
+        label = f"🟡 攻防激烈（{hit_count}篇含情緒字眼）"
+    else:
+        label = f"🟢 平實陳述（僅{hit_count}篇含情緒詞）"
+    return f"{ratio}% 煽動度", label
+
+
+def detect_agenda_leader(current, parsed, camp_counts):
+    """判定議題主導陣營（誰在設定戰場）"""
+    report_text = current.get("report", "")
+    m = re.search(r"【議題主導陣營】[：:\s\*]*(.+?)(?:\n|$)", report_text)
+    if m:
+        raw = m.group(1).strip().strip("*")
+        parts = raw.split("｜") if "｜" in raw else [raw, "主導本時段輿論攻防"]
+        return parts[0].strip(), parts[1].strip()
+
+    topic = current.get("topic", "")
+    summary = parsed.get("summary", "")
+    sec1 = parsed.get("sec1", "")
+    combined = f"{topic} {summary}"
+
+    has_blue = any(k in combined for k in ["國民黨", "藍營", "蔣萬安", "韓國瑜"])
+    has_green = any(k in combined for k in ["民進黨", "綠營", "行政院", "卓榮泰", "賴清德"])
+    has_white = any(k in combined for k in ["民眾黨", "白營", "柯文哲", "黃國昌"])
+
+    n_blue = camp_counts["泛藍傾向"]
+    n_green = camp_counts["泛綠傾向"]
+
+    if has_blue and has_white and not has_green:
+        return "🟦⬜ 藍白雙邊交鋒", "藍白陣營互動成輿論焦點"
+    if "拉鋸" in sec1 or (has_blue and has_green):
+        if n_blue > n_green + 3:
+            return "🟦 藍營主導戰場", "在野拋出議題・執政黨防守反擊"
+        if n_green > n_blue + 3:
+            return "🟩 綠營主導戰場", "執政陣營強勢定調・在野攻防"
+        return "⚔️ 朝野攻防拉鋸", "藍綠雙方陣營互有攻守"
+    if n_green >= n_blue * 1.5 and n_green > 5:
+        return "🟩 泛綠主導戰場", "綠營媒體高密度發動議題"
+    if n_blue >= n_green * 1.5 and n_blue > 5:
+        return "🟦 泛藍主導戰場", "藍營媒體高密度發動議題"
+    return "⚖️ 跨陣營共同關注", "各陣營媒體皆高比例跟進"
+
+
+def extract_stances(current, parsed):
+    """萃取當事人表態對照卡（支援新舊報告格式）"""
+    report_text = current.get("report", "")
+    stances = []
+
+    # 優先讀取結構化表態區塊
+    block_m = re.search(
+        r"【當事人表態對照】(.*?)(?=\n###|\n---|\Z)",
+        report_text,
+        re.DOTALL
+    )
+    if block_m:
+        lines = block_m.group(1).strip().split("\n")
+        for line in lines:
+            line = line.strip().lstrip("*-• ")
+            if "：" in line or ":" in line:
+                sep = "：" if "：" in line else ":"
+                actor, quote = line.split(sep, 1)
+                actor = actor.strip().strip("*[]【】")
+                quote = quote.strip().strip("*")
+                if actor and quote:
+                    stances.append((actor, quote))
+        if stances:
+            return stances[:4]
+
+    # 舊報告自動從摘要與內文智慧拆解當事人立場
+    summary = parsed.get("summary", "")
+    sentences = [s.strip() for s in re.split(r"[。；]", summary) if len(s.strip()) > 6]
+
+    actor_rules = [
+        ("🟦 國民黨／藍營立場", ["國民黨", "藍營", "蔣萬安", "韓國瑜"]),
+        ("🟩 行政院／執政立場", ["行政院長", "卓榮泰", "行政院", "民進黨", "賴清德", "總統府"]),
+        ("⬜ 民眾黨／白營立場", ["民眾黨", "柯文哲", "黃國昌", "白營"]),
+        ("🏛️ 主管機關／院會進度", ["財政部", "立法院", "朝野協商", "院會"])
+    ]
+
+    used_sentences = set()
+    for label, keywords in actor_rules:
+        matched_parts = []
+        for idx, sent in enumerate(sentences):
+            if idx in used_sentences:
+                continue
+            if any(k in sent for k in keywords):
+                matched_parts.append(sent)
+                used_sentences.add(idx)
+        if matched_parts:
+            stances.append((label, "。".join(matched_parts) + "。"))
+
+    # 若摘要為同一事件中兩位主角交鋒（如柯文哲與蔣萬安），按句子拆分
+    if len(stances) < 2 and sentences:
+        stances = []
+        for sent in sentences[:3]:
+            if "柯文哲" in sent:
+                stances.append(("⬜ 柯文哲（民眾黨）", sent + "。"))
+            elif "蔣萬安" in sent:
+                stances.append(("🟦 蔣萬安（國民黨）", sent + "。"))
+            else:
+                stances.append(("⚖️ 事件關鍵動態", sent + "。"))
+
+    return stances[:3]
+
+
 def parse_report_data(report_md):
     cleaned = re.sub(r"^好的，.*?\n+", "", report_md.strip())
 
     summary = ""
-    sum_pattern = r"【中立客觀事實摘要】[：:\s\*]*(.+?)(?=\n---|\n###|\n\n)"
+    sum_pattern = r"【中立客觀事實摘要】[：:\s\*]*(.+?)(?=\n---|\n###|\n\n|\n【)"
     sum_match = re.search(sum_pattern, cleaned, re.DOTALL)
     if sum_match:
         summary = sum_match.group(1).strip().strip("*")
@@ -168,13 +313,15 @@ else:
             )
             st.divider()
             st.subheader("📊 儀表板閱讀指南")
-            st.caption("• 光譜比例尺：一眼看出哪個陣營媒體在主導話題。")
-            st.caption("• 可靠度分數：80分以上代表具名事實居多；低於60分多為放話或推論。")
+            st.caption("• 情緒煽動度：統計標題含強烈情緒字眼之比例，防範標題殺人。")
+            st.caption("• 議題主導陣營：判讀本波輿論戰由哪一方設定戰場。")
+            st.caption("• 當事人表態卡：並排對照各方核心說法，秒懂爭點。")
             st.caption("• 盲點雙欄卡：左右對照藍綠受眾各自被隱藏的資訊。")
 
         current = history[selected_idx]
         sources = current.get("sources", [])
         parsed = parse_report_data(current.get("report", ""))
+        camp_counts = Counter(classify_camp(s) for s in sources)
 
         valid_sources = [
             s for s in sources
@@ -191,11 +338,11 @@ else:
         st.metric(
             "🔥 本時段最大議題",
             current["topic"],
-            f"{current['period']}｜{current['date_str']}"
+            f"{current['period']}｜{current['date_str']}（跨媒體比對 {current['article_count']} 篇報導）"
         )
 
-        # 第二行：可靠度分數、最早首發媒體、跨媒體比對樣本
-        c1, c2, c3 = st.columns(3)
+        # 第二行：四大戰情指標（可靠度、情緒溫度計、主導陣營、最早首發）
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
             score = parsed["score"]
             if score >= 75:
@@ -206,18 +353,19 @@ else:
                 score_label = "偏低（多匿名放話／帶風向）"
             st.metric("🛡️ 消息來源可靠度", f"{score} / 100 分", score_label)
         with c2:
+            emo_val, emo_label = calc_emotion_metric(sources)
+            st.metric("🎭 標題情緒煽動度", emo_val, emo_label)
+        with c3:
+            leader_val, leader_label = detect_agenda_leader(current, parsed, camp_counts)
+            st.metric("📣 議題主導陣營", leader_val, leader_label)
+        with c4:
             st.metric(
                 "🥇 最早首發媒體",
                 first_source["source"],
                 f"首發時間：{first_source['time_str'][-5:]}"
             )
-        with c3:
-            st.metric(
-                "📰 跨媒體比對樣本",
-                f"{current['article_count']} 篇報導",
-                "涵蓋藍・綠・白・中立媒體"
-            )
 
+        # 中立事實 3 秒快讀區
         if parsed["summary"]:
             st.markdown(f"""
             <div class="summary-box">
@@ -226,11 +374,31 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
+        # 當事人表態對照卡
+        stances = extract_stances(current, parsed)
+        if stances:
+            st.markdown("##### 🗣️ 當事人與各方核心表態對照")
+            s_cols = st.columns(len(stances))
+            for idx, (actor, quote) in enumerate(stances):
+                border_color = "#3b82f6"
+                if "綠" in actor or "政院" in actor or "民進黨" in actor:
+                    border_color = "#22c55e"
+                elif "白" in actor or "柯" in actor or "民眾黨" in actor:
+                    border_color = "#06b6d4"
+                elif "機關" in actor or "院會" in actor or "動態" in actor:
+                    border_color = "#eab308"
+                with s_cols[idx]:
+                    st.markdown(f"""
+                    <div class="stance-card" style="border-top-color: {border_color};">
+                        <div class="stance-title">{actor}</div>
+                        <div class="stance-body">{quote}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
         col_left, col_right = st.columns([1.35, 1])
 
         with col_left:
             st.subheader("🌈 媒體立場報導聲量光譜")
-            camp_counts = Counter(classify_camp(s) for s in sources)
             total = max(len(sources), 1)
 
             n_blue = camp_counts["泛藍傾向"]
