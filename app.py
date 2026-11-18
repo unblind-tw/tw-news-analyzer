@@ -275,11 +275,9 @@ def extract_stances(current, parsed):
                 actor = actor.strip().strip("*[]【】")
                 quote = quote.strip().strip("*")
 
-                # 自動過濾「無相關報導」或空白項目
                 if any(empty_w in quote for empty_w in ["無相關報導", "無表態", "未表態", "無直接相關", "未提及"]):
                     continue
 
-                # 清理舊版模板殘留字眼，若引文內含真實人名冒號則自動提昇為標題
                 prefix_match = re.match(r"^([🟦🟩⬜🏛️⚖️]+)", actor)
                 badge = prefix_match.group(1) + " " if prefix_match else "🗣️ "
                 cleaned_actor = re.sub(
@@ -302,7 +300,6 @@ def extract_stances(current, parsed):
     summary = parsed.get("summary", "")
     sentences = [s.strip() for s in re.split(r"[。；]", summary) if len(s.strip()) > 6]
 
-    # 若有效表態卡僅有 1 張，自動從摘要補充事件背景對照卡，讓版面平衡
     if len(stances) == 1 and len(sentences) >= 2:
         stances.append(("⚖️ 媒體解讀與事件背景", sentences[-1] + "。"))
         return stances
@@ -310,7 +307,6 @@ def extract_stances(current, parsed):
     if len(stances) >= 2:
         return stances[:4]
 
-    # 若無結構化表態區塊，自動從摘要拆解
     actor_rules = [
         ("🟦 國民黨／藍營立場", ["國民黨", "藍營", "蔣萬安", "韓國瑜"]),
         ("🟩 行政院／綠營立場", ["行政院長", "卓榮泰", "行政院", "民進黨", "賴清德", "沈伯洋"]),
@@ -442,6 +438,20 @@ else:
             st.caption("• 議題主導陣營：判讀本波輿論戰由哪一方設定戰場。")
             st.caption("• 當事人表態卡：並排對照各方核心說法，秒懂爭點。")
             st.caption("• 盲點雙欄卡：左右對照藍綠受眾各自被隱藏的資訊。")
+            st.divider()
+            st.markdown("""
+            <div style="background-color:#1e293b; border:1px solid #334155; border-left:4px solid #eab308; padding:14px; border-radius:10px;">
+                <div style="font-weight:700; color:#fde047; font-size:0.95rem; margin-bottom:6px;">
+                    ☕ 支持《政治解盲》獨立運作
+                </div>
+                <div style="font-size:0.83rem; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
+                    為拒絕政黨與財團介入，本站絕不刊登政治業配。歡迎免費加入或小額贊助 AI 運算成本！
+                </div>
+                <a href="https://www.patreon.com/unblindnews" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:8px 12px; border-radius:6px; text-decoration:none; font-size:0.9rem;">
+                    💛 贊助支持 ／ 免費訂閱
+                </a>
+            </div>
+            """, unsafe_allow_html=True)
 
         current = history[selected_idx]
         sources = current.get("sources", [])
@@ -753,3 +763,18 @@ else:
                     f"`#{idx:02d}` **{src['time_str']}** ｜ {badge} "
                     f"**[{src['source']}]** [{src['title']}]({src['link']}){first_tag}"
                 )
+
+        st.divider()
+        st.markdown("""
+        <div style="background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%); border:1px solid #334155; border-radius:12px; padding:20px 24px; text-align:center; margin-top:10px;">
+            <div style="font-size:1.15rem; font-weight:800; color:#fde047; margin-bottom:6px;">
+                🛡️ 守護獨立中立，拒絕政黨業配介入
+            </div>
+            <div style="font-size:0.92rem; color:#cbd5e1; margin-bottom:14px;">
+                《政治解盲》由獨立系統全自動運作。若這份分析幫助你看清媒體風向，歡迎請 AI 喝杯咖啡，或免費加入會員接收最新觀測通知！
+            </div>
+            <a href="https://www.patreon.com/unblindnews" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 24px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
+                ☕ 請 AI 喝杯咖啡 ／ 免費加入訂閱
+            </a>
+        </div>
+        """, unsafe_allow_html=True)
