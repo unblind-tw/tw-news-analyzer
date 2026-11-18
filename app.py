@@ -445,13 +445,10 @@ else:
                     ☕ 支持《政治解盲》獨立運作
                 </div>
                 <div style="font-size:0.83rem; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
-                    為拒絕政黨與財團介入，本站絕不刊登政治業配。歡迎免註冊請 AI 喝杯咖啡！
+                    為拒絕政黨與財團介入，本站絕不刊登政治業配。歡迎小額贊助或定期支持 AI 運算成本！
                 </div>
-                <a href="https://unblindnews.gumroad.com/l/support?wanted=true" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:8px 10px; border-radius:6px; text-decoration:none; font-size:0.88rem; margin-bottom:8px;">
-                    🍎 Apple Pay ／ Google Pay 秒刷
-                </a>
-                <a href="https://portaly.cc/unblindnews/support" target="_blank" style="display:block; text-align:center; background-color:#334155; color:#f8fafc; font-weight:700; padding:7px 10px; border-radius:6px; text-decoration:none; font-size:0.83rem;">
-                    💳 台灣信用卡 ／ 每月定期支持
+                <a href="https://portaly.cc/unblindnews/support" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:9px 12px; border-radius:6px; text-decoration:none; font-size:0.9rem;">
+                    💛 請 AI 喝杯咖啡（贊助支持）
                 </a>
             </div>
             """, unsafe_allow_html=True)
@@ -774,15 +771,10 @@ else:
                 🛡️ 守護獨立中立，拒絕政黨業配介入
             </div>
             <div style="font-size:0.92rem; color:#cbd5e1; margin-bottom:14px;">
-                《政治解盲》由獨立系統全自動運作。若這份分析幫助你看清媒體風向，歡迎免註冊請 AI 喝杯咖啡，或每月定期支持伺服器運算！
+                《政治解盲》由獨立系統全自動運作。若這份分析幫助你看清媒體風向，歡迎請 AI 喝杯咖啡，支持伺服器每日運算！
             </div>
-            <div style="display: inline-flex; flex-wrap: wrap; gap: 12px; justify-content: center;">
-                <a href="https://unblindnews.gumroad.com/l/support?wanted=true" target="_blank" style="background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 24px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
-                    🍎 Apple Pay ／ Google Pay 單次秒刷
-                </a>
-                <a href="https://portaly.cc/unblindnews/support" target="_blank" style="background-color:#334155; color:#f8fafc; font-weight:700; padding:10px 24px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
-                    💳 台灣信用卡 ／ 每月定期支持
-                </a>
-            </div>
+            <a href="https://portaly.cc/unblindnews/support" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 28px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
+                ☕ 請 AI 喝杯咖啡（單次贊助 ／ 定期支持）
+            </a>
         </div>
         """, unsafe_allow_html=True)
