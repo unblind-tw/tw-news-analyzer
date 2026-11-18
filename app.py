@@ -50,7 +50,7 @@ footer { visibility: hidden !important; }
     font-weight: 600;
 }
 
-/* 四大戰情指標獨立卡片（徹底隔開不碰撞） */
+/* 四大戰情指標獨立卡片 */
 .metric-card {
     background-color: #1e293b;
     border: 1px solid #334155;
@@ -105,7 +105,7 @@ footer { visibility: hidden !important; }
     padding: 16px 18px;
     margin-bottom: 16px;
     color: #f8fafc;
-    min-height: 125px;
+    min-height: 120px;
 }
 .stance-title {
     font-weight: 700;
@@ -185,7 +185,7 @@ SENSATIONAL_WORDS = [
     "驚", "爆", "急了", "傻眼", "洗臉", "跳腳", "開戰", "吵成一團",
     "鬆一口氣", "強行", "闖關", "黑箱", "自肥", "掏空", "神隱", "打假球",
     "變調", "鬆口", "大罵", "反擊", "踢爆", "怒斥", "狂酸", "炒不起來",
-    "救", "難發酵", "力拚", "力拼", "破局", "打槍", "切割", "！", "!"
+    "救", "難發酵", "力拚", "力拼", "破局", "打槍", "切割", "倒戈", "！", "!"
 ]
 
 
@@ -266,7 +266,6 @@ def extract_stances(current, parsed):
     )
     if block_m:
         raw_block = block_m.group(1).strip()
-        # 支援單行或多行星號切割
         items = re.split(r"(?:\n\s*[\*\-•]\s*|\s+\*\s+)", raw_block)
         for item in items:
             line = item.strip().lstrip("*-• ").strip("*")
@@ -275,18 +274,47 @@ def extract_stances(current, parsed):
                 actor, quote = line.split(sep, 1)
                 actor = actor.strip().strip("*[]【】")
                 quote = quote.strip().strip("*")
-                if actor and quote:
-                    stances.append((actor, quote))
-        if stances:
-            return stances[:4]
+
+                # 自動過濾「無相關報導」或空白項目
+                if any(empty_w in quote for empty_w in ["無相關報導", "無表態", "未表態", "無直接相關", "未提及"]):
+                    continue
+
+                # 清理舊版模板殘留字眼，若引文內含真實人名冒號則自動提昇為標題
+                prefix_match = re.match(r"^([🟦🟩⬜🏛️⚖️]+)", actor)
+                badge = prefix_match.group(1) + " " if prefix_match else "🗣️ "
+                cleaned_actor = re.sub(
+                    r"^[🟦🟩⬜🏛️⚖️\s]*|當事人或|代表名稱|實際當事人[A-C]姓名|（陣營或職稱）",
+                    "",
+                    actor
+                ).strip()
+
+                if ("：" in quote or ":" in quote) and (not cleaned_actor or "/" in cleaned_actor or "／" in cleaned_actor):
+                    q_sep = "：" if "：" in quote else ":"
+                    sub_actor, sub_quote = quote.split(q_sep, 1)
+                    if len(sub_actor.strip()) <= 12:
+                        cleaned_actor = sub_actor.strip()
+                        quote = sub_quote.strip()
+
+                final_actor = f"{badge}{cleaned_actor}" if cleaned_actor else f"{badge}關鍵當事人表態"
+                if quote:
+                    stances.append((final_actor, quote))
 
     summary = parsed.get("summary", "")
     sentences = [s.strip() for s in re.split(r"[。；]", summary) if len(s.strip()) > 6]
 
+    # 若有效表態卡僅有 1 張，自動從摘要補充事件背景對照卡，讓版面平衡
+    if len(stances) == 1 and len(sentences) >= 2:
+        stances.append(("⚖️ 媒體解讀與事件背景", sentences[-1] + "。"))
+        return stances
+
+    if len(stances) >= 2:
+        return stances[:4]
+
+    # 若無結構化表態區塊，自動從摘要拆解
     actor_rules = [
         ("🟦 國民黨／藍營立場", ["國民黨", "藍營", "蔣萬安", "韓國瑜"]),
         ("🟩 行政院／綠營立場", ["行政院長", "卓榮泰", "行政院", "民進黨", "賴清德", "沈伯洋"]),
-        ("⬜ 民眾黨／白營立場", ["民眾黨", "柯文哲", "黃國昌", "白營"]),
+        ("⬜ 民眾黨／白營立場", ["民眾黨", "柯文哲", "黃國昌", "白營", "張天民"]),
         ("🏛️ 主管機關／院會進度", ["財政部", "立法院", "朝野協商", "院會"])
     ]
 
@@ -316,7 +344,6 @@ def extract_stances(current, parsed):
 
 
 def format_blindspot_items(raw_text):
-    """將盲點文字拆解為獨立條列區塊，不再擠成一團"""
     if not raw_text:
         return ""
     cleaned = re.sub(r"^這群讀者.*?(?:看不見|錯過)[：:\s]*", "", raw_text.strip())
@@ -335,7 +362,6 @@ def format_blindspot_items(raw_text):
 def parse_report_data(report_md):
     cleaned = re.sub(r"^好的，.*?\n+", "", report_md.strip())
 
-    # 精準擷取摘要：遇到【議題主導陣營】或【當事人表態對照】立即停止，絕不吸進後續文字
     summary = ""
     sum_pattern = (
         r"【中立客觀事實摘要】[：:\s\*]*(.+?)"
@@ -386,7 +412,7 @@ def parse_report_data(report_md):
 
 
 st.title("🔍 政治解盲")
-st.caption("每日早（08:00）、中（12:30）、晚（19:00）自動鎖定全台最大政治議題，交叉比對各方媒體，破解同溫層盲區，還原無偏見的純淨事實。")
+st.caption("每日早（08:00）、中（12:00）、晚（19:00）自動鎖定全台最大政治議題，交叉比對各方媒體，破解同溫層盲區，還原無偏見的純淨事實。")
 
 data_file = "news_history.json"
 
@@ -444,7 +470,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
 
-        # 第二排：四大戰情指標（各自獨立邊框卡片，絕不擠在一起）
+        # 第二排：四大戰情指標
         score = parsed["score"]
         if score >= 75:
             score_label = "🟢 高可靠度（具名事實為主）"
@@ -506,11 +532,11 @@ else:
             s_cols = st.columns(len(stances))
             for idx, (actor, quote) in enumerate(stances):
                 border_color = "#3b82f6"
-                if any(w in actor for w in ["綠", "政院", "民進黨", "沈伯洋", "卓榮泰", "賴清德"]):
+                if any(w in actor for w in ["🟩", "綠", "政院", "民進黨", "沈伯洋", "卓榮泰", "賴清德"]):
                     border_color = "#22c55e"
-                elif any(w in actor for w in ["白", "柯", "民眾黨", "黃國昌"]):
+                elif any(w in actor for w in ["⬜", "白", "柯", "民眾黨", "黃國昌", "張天民"]):
                     border_color = "#06b6d4"
-                elif any(w in actor for w in ["機關", "院會", "動態", "財政部"]):
+                elif any(w in actor for w in ["🏛️", "⚖️", "機關", "院會", "動態", "背景", "財政部"]):
                     border_color = "#eab308"
                 with s_cols[idx]:
                     st.markdown(f"""
