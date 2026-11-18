@@ -2,7 +2,7 @@ name: Daily Political News Analyzer
 
 on:
   schedule:
-    # 台灣時間 07:45 (UTC 23:45) 早報 — 徹底避開 UTC 00:00 全球午夜大塞車
+    # 台灣時間 07:45 (UTC 23:45) 早報 — 避開 UTC 00:00 全球午夜塞車
     - cron: '45 23 * * *'
     # 台灣時間 12:23 (UTC 04:23) 午報 — 避開整點與半點尖峰
     - cron: '23 4 * * *'
