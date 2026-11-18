@@ -445,10 +445,10 @@ else:
                     ☕ 支持《政治解盲》獨立運作
                 </div>
                 <div style="font-size:0.83rem; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
-                    為拒絕政黨與財團介入，本站絕不刊登政治業配。歡迎免費加入或小額贊助 AI 運算成本！
+                    為拒絕政黨與財團介入，本站絕不刊登政治業配。歡迎單次請喝咖啡或每月定期支持 AI 運算成本！
                 </div>
-                <a href="https://www.patreon.com/unblindnews" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:8px 12px; border-radius:6px; text-decoration:none; font-size:0.9rem;">
-                    💛 贊助支持 ／ 免費訂閱
+                <a href="https://portaly.cc/unblindnews/support" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:8px 12px; border-radius:6px; text-decoration:none; font-size:0.9rem;">
+                    💛 單次贊助 ／ 每月訂閱支持
                 </a>
             </div>
             """, unsafe_allow_html=True)
@@ -771,10 +771,10 @@ else:
                 🛡️ 守護獨立中立，拒絕政黨業配介入
             </div>
             <div style="font-size:0.92rem; color:#cbd5e1; margin-bottom:14px;">
-                《政治解盲》由獨立系統全自動運作。若這份分析幫助你看清媒體風向，歡迎請 AI 喝杯咖啡，或免費加入會員接收最新觀測通知！
+                《政治解盲》由獨立系統全自動運作。若這份分析幫助你看清媒體風向，歡迎單次請 AI 喝杯咖啡，或每月定期支持伺服器運算！
             </div>
-            <a href="https://www.patreon.com/unblindnews" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 24px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
-                ☕ 請 AI 喝杯咖啡 ／ 免費加入訂閱
+            <a href="https://portaly.cc/unblindnews/support" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 28px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
+                ☕ 單次贊助 ／ 每月訂閱支持（免註冊）
             </a>
         </div>
         """, unsafe_allow_html=True)
