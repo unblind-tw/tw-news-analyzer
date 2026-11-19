@@ -7,10 +7,36 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 st.set_page_config(
-    page_title="政治解盲 | 還原無偏見的純淨事實",
+    page_title="政治解盲 | 跨媒體立場對照與盲點觀測站",
     page_icon="🔍",
     layout="wide"
 )
+
+# ==========================================
+# 📢 改版公告設定區（改成 True 即開啟進站彈跳小視窗）
+# ==========================================
+SHOW_UPDATE_BANNER = True   # 頂部可摺疊通知條（不擋畫面，推薦常駐）
+SHOW_UPDATE_POPUP = False   # 進站自動彈出小視窗（短期強提醒用，預設關閉）
+UPDATE_TITLE = "📢 【v1.2 透明化改版公告】剔除轉載平台、公開完整媒體分類標準"
+UPDATE_NOTES = """
+感謝熱心讀者回饋與抓蟲！本次系統完成以下 **3 項核心透明化升級**：
+
+1. **🚫 全面剔除新聞轉載入口平台**：系統已自動過濾 `LINE TODAY`、`Yahoo`、`MSN`、`PChome`、`蕃新聞` 等聚合轉載網站，只統計原始發稿之原生媒體，避免將特定陣營報導誤歸類或重複計算。
+2. **⚖️ 新增「分類方法論與光譜公開」分頁**：直接於下方第 5 個分頁完整公開所有媒體歸類清單與判讀原則，接受所有讀者公開檢驗與指正。
+3. **🏷️ 更精準的分類命名與媒體字典擴充**：將「中立／綜合」調整為 **「公媒／通訊社與商業綜合」**（不替任何單一媒體背書絕對中立），並補齊「鏡報、菱傳媒、上報、信傳媒」等媒體資料。
+"""
+
+if SHOW_UPDATE_POPUP and hasattr(st, "dialog"):
+    @st.dialog(UPDATE_TITLE)
+    def show_changelog_dialog():
+        st.markdown(UPDATE_NOTES)
+        st.write("")
+        if st.button("我知道了，開始閱讀", type="primary", use_container_width=True):
+            st.session_state["seen_update_popup"] = True
+            st.rerun()
+
+    if not st.session_state.get("seen_update_popup", False):
+        show_changelog_dialog()
 
 st.markdown("""
 <style>
@@ -82,7 +108,7 @@ footer { visibility: hidden !important; }
     line-height: 1.4;
 }
 
-/* 3秒看懂真相摘要框 */
+/* 3秒看懂爭點摘要框 */
 .summary-box {
     background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
     border-left: 6px solid #2563eb;
@@ -170,13 +196,19 @@ footer { visibility: hidden !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# 排除純轉載入口平台（確保前台歷史資料也即時過濾）
+AGGREGATOR_BLACKLIST = [
+    "LINE TODAY", "LINE新聞", "Yahoo", "MSN", "PChome",
+    "蕃新聞", "Match生活網", "HiNet", "Hinet"
+]
+
 GREEN_KEYS = [
     "泛綠", "深綠", "偏綠", "自由", "三立", "民視",
-    "新頭殼", "Newtalk", "太報", "鏡週刊", "放言"
+    "新頭殼", "Newtalk", "太報", "鏡週刊", "鏡報", "放言", "民報"
 ]
 BLUE_KEYS = [
     "泛藍", "深藍", "親中", "聯合", "UDN", "udn", "中時", "中國時報",
-    "中天", "TVBS", "風傳媒", "中視", "中廣", "工商", "經濟日報"
+    "中天", "TVBS", "風傳媒", "中視", "中廣", "工商", "經濟日報", "梅花"
 ]
 WHITE_KEYS = ["泛白", "民眾", "匯流", "CNEWS"]
 
@@ -189,6 +221,11 @@ SENSATIONAL_WORDS = [
 ]
 
 
+def is_aggregator(source_name):
+    s_lower = (source_name or "").lower()
+    return any(b.lower() in s_lower for b in AGGREGATOR_BLACKLIST)
+
+
 def classify_camp(source_item):
     tag = source_item.get("bias_tag", "")
     name = source_item.get("source", "")
@@ -199,7 +236,7 @@ def classify_camp(source_item):
         return "泛藍傾向"
     if any(k in text for k in WHITE_KEYS):
         return "泛白／第三勢力"
-    return "中立／綜合媒體"
+    return "公媒／通訊社與商業綜合"
 
 
 def calc_emotion_metric(sources):
@@ -360,7 +397,7 @@ def parse_report_data(report_md):
 
     summary = ""
     sum_pattern = (
-        r"【中立客觀事實摘要】[：:\s\*]*(.+?)"
+        r"【(?:中立客觀|多方對照)事實摘要】[：:\s\*]*(.+?)"
         r"(?=\s*\*{0,2}【議題主導陣營】|\s*\*{0,2}【當事人表態對照】|\n---|\n###|\n\n)"
     )
     sum_match = re.search(sum_pattern, cleaned, re.DOTALL)
@@ -408,7 +445,11 @@ def parse_report_data(report_md):
 
 
 st.title("🔍 政治解盲")
-st.caption("每日早（08:00）、中（12:00）、晚（19:00）自動鎖定全台最大政治議題，交叉比對各方媒體，破解同溫層盲區，還原無偏見的純淨事實。")
+st.caption("每日早（08:00）、中（12:30）、晚（19:00）自動鎖定全台最大政治議題，交叉比對藍、綠、白與公媒／商業媒體報導，攤開同溫層盲區，還原多方對照的事實全貌。")
+
+if SHOW_UPDATE_BANNER:
+    with st.expander(f"{UPDATE_TITLE}（點擊展開查看）", expanded=False):
+        st.markdown(UPDATE_NOTES)
 
 data_file = "news_history.json"
 
@@ -438,6 +479,7 @@ else:
             st.caption("• 議題主導陣營：判讀本波輿論戰由哪一方設定戰場。")
             st.caption("• 當事人表態卡：並排對照各方核心說法，秒懂爭點。")
             st.caption("• 盲點雙欄卡：左右對照藍綠受眾各自被隱藏的資訊。")
+            st.caption("• 分類透明公開：點擊第 5 分頁可查閱完整媒體歸類清單。")
             st.divider()
             st.markdown("""
             <div style="background-color:#1e293b; border:1px solid #334155; border-left:4px solid #eab308; padding:14px; border-radius:10px;">
@@ -454,7 +496,12 @@ else:
             """, unsafe_allow_html=True)
 
         current = history[selected_idx]
-        sources = current.get("sources", [])
+        raw_sources = current.get("sources", [])
+        # 即時剔除 LINE TODAY / Yahoo 等轉載入口平台，僅保留原生媒體報導
+        filtered_sources = [s for s in raw_sources if not is_aggregator(s.get("source", ""))]
+        sources = filtered_sources if filtered_sources else raw_sources
+        excluded_count = len(raw_sources) - len(sources)
+
         parsed = parse_report_data(current.get("report", ""))
         camp_counts = Counter(classify_camp(s) for s in sources)
 
@@ -470,12 +517,13 @@ else:
             first_source = {"source": "無", "time_str": "無", "title": ""}
 
         # 第一排：獨立橫幅卡片顯示本時段最大議題
+        filter_note = f"・已排除 {excluded_count} 篇轉載入口" if excluded_count > 0 else "・僅計原生媒體"
         st.markdown(f"""
         <div class="topic-banner">
             <div class="topic-label">🔥 本時段最大政治議題</div>
             <div class="topic-title">{current["topic"]}</div>
             <span class="topic-meta">
-                📅 {current["period"]}｜{current["date_str"]}（跨媒體比對 {current["article_count"]} 篇報導）
+                📅 {current["period"]}｜{current["date_str"]}（跨媒體比對 {len(sources)} 篇原生報導{filter_note}）
             </span>
         </div>
         """, unsafe_allow_html=True)
@@ -526,11 +574,11 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-        # 第三排：純淨版中立事實 3 秒快讀區
+        # 第三排：去情緒化多方事實摘要區
         if parsed["summary"]:
             st.markdown(f"""
             <div class="summary-box">
-                <strong>⚖️ 【3秒看懂真相】去偏見中立事實摘要：</strong><br>
+                <strong>⚖️ 【3秒看懂爭點】去情緒化多方事實摘要：</strong><br>
                 {parsed["summary"]}
             </div>
             """, unsafe_allow_html=True)
@@ -565,13 +613,13 @@ else:
 
             n_blue = camp_counts["泛藍傾向"]
             n_white = camp_counts["泛白／第三勢力"]
-            n_neutral = camp_counts["中立／綜合媒體"]
+            n_other = camp_counts["公媒／通訊社與商業綜合"]
             n_green = camp_counts["泛綠傾向"]
 
             p_blue = round(n_blue / total * 100)
             p_white = round(n_white / total * 100)
-            p_neutral = round(n_neutral / total * 100)
-            p_green = max(0, 100 - p_blue - p_white - p_neutral)
+            p_other = round(n_other / total * 100)
+            p_green = max(0, 100 - p_blue - p_white - p_other)
 
             def seg_label(name, pct):
                 if pct >= 14:
@@ -591,10 +639,10 @@ else:
                     f'<div class="spectrum-segment" style="width:{p_white}%;'
                     f'background:#06b6d4;">{seg_label("⬜ 泛白", p_white)}</div>'
                 )
-            if p_neutral > 0:
+            if p_other > 0:
                 segments.append(
-                    f'<div class="spectrum-segment" style="width:{p_neutral}%;'
-                    f'background:#64748b;">{seg_label("🟨 中立與綜合", p_neutral)}</div>'
+                    f'<div class="spectrum-segment" style="width:{p_other}%;'
+                    f'background:#64748b;">{seg_label("🟨 公媒/綜合", p_other)}</div>'
                 )
             if p_green > 0:
                 segments.append(
@@ -608,7 +656,7 @@ else:
             m1, m2, m3, m4 = st.columns(4)
             m1.caption(f"🟦 **泛藍傾向**：{n_blue} 篇 ({p_blue}%)")
             m2.caption(f"⬜ **泛白傾向**：{n_white} 篇 ({p_white}%)")
-            m3.caption(f"🟨 **中立／綜合**：{n_neutral} 篇 ({p_neutral}%)")
+            m3.caption(f"🟨 **公媒／綜合**：{n_other} 篇 ({p_other}%)")
             m4.caption(f"🟩 **泛綠傾向**：{n_green} 篇 ({p_green}%)")
 
             if p_green >= p_blue * 2 and p_green > 30:
@@ -616,7 +664,7 @@ else:
             elif p_blue >= p_green * 2 and p_blue > 30:
                 st.warning("📢 聲量提示：本時段泛藍媒體報導密集度明顯較高。")
             else:
-                st.success("⚖️ 聲量提示：本時段藍綠與綜合媒體皆有高度關注，屬跨陣營交鋒議題。")
+                st.success("⚖️ 聲量提示：本時段藍綠與公媒／商業媒體皆有高度關注，屬跨陣營交鋒議題。")
 
         with col_right:
             st.subheader("📈 輿論發酵時間軸（各小時發稿量）")
@@ -678,11 +726,12 @@ else:
 
         st.divider()
 
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "🕳️ 同溫層盲點雙欄對照",
             "🧭 政黨風向與用詞比較表",
             "🕵️‍♂️ 源頭追蹤與真偽拆解",
-            f"📰 原始報導立場篩選器 ({len(sources)}篇)"
+            f"📰 原始報導立場篩選器 ({len(sources)}篇)",
+            "⚖️ 分類方法論與光譜公開"
         ])
 
         with tab1:
@@ -735,15 +784,15 @@ else:
                 st.markdown(parsed["cleaned"])
 
         with tab4:
-            st.markdown("#### 🔍 依發布時間戳記排序之原始新聞清單")
+            st.markdown("#### 🔍 依發布時間戳記排序之原始原生新聞清單")
             filter_camp = st.radio(
-                "點選篩選特定媒體立場：",
+                "點選篩選特定媒體分類：",
                 [
                     "全部顯示",
                     "🟦 泛藍傾向",
                     "🟩 泛綠傾向",
                     "⬜ 泛白／第三勢力",
-                    "🟨 中立／綜合媒體"
+                    "🟨 公媒／通訊社與商業綜合"
                 ],
                 horizontal=True
             )
@@ -751,27 +800,53 @@ else:
                 "泛藍傾向": "🟦 泛藍",
                 "泛綠傾向": "🟩 泛綠",
                 "泛白／第三勢力": "⬜ 泛白",
-                "中立／綜合媒體": "🟨 中立/綜合"
+                "公媒／通訊社與商業綜合": "🟨 公媒/綜合"
             }
             for idx, src in enumerate(sources, 1):
                 c_type = classify_camp(src)
                 if filter_camp != "全部顯示" and not filter_camp.endswith(c_type):
                     continue
-                badge = camp_badge.get(c_type, "🟨 綜合")
+                badge = camp_badge.get(c_type, "🟨 公媒/綜合")
                 first_tag = " 🏆 **【全網首發】**" if idx == 1 else ""
                 st.markdown(
                     f"`#{idx:02d}` **{src['time_str']}** ｜ {badge} "
                     f"**[{src['source']}]** [{src['title']}]({src['link']}){first_tag}"
                 )
 
+        with tab5:
+            st.markdown("#### ⚖️ 媒體光譜分類方法論與透明聲明")
+            st.info(
+                "**透明聲明**：沒有任何單一媒體或 AI 模型是 100% 絕對中立的。"
+                "《政治解盲》不替任何媒體背書「絕對中立」，本系統之分類僅依據各媒體長期社論立場、集團屬性與公開研究作為交叉比對基準；"
+                "所有原始報導均附於「原始報導立場篩選器」分頁，供讀者獨立查證。"
+            )
+            st.markdown("""
+**1. 嚴格剔除純轉載入口網站**
+* 系統在抓取新聞時，會自動排除 **`LINE TODAY`、`LINE新聞`、`Yahoo`、`MSN`、`PChome`、`蕃新聞`、`Match生活網`、`HiNet`** 等新聞聚合轉載平台。
+* 目的在於避免特定陣營原生媒體（例如自由時報、中時、鏡報等）透過入口網站轉載後，被誤歸入綜合分類或造成聲量重複計算。
+
+**2. 系統現行四大媒體觀測群組公開清單**
+
+| 觀測分類 | 歸納判準 | 目前列入之代表媒體 |
+| :--- | :--- | :--- |
+| **🟦 泛藍傾向** | 長期社論偏向在野監督、兩岸溫和派或藍營／旺中／聯合報系媒體 | 聯合報、聯合新聞網（UDN）、經濟日報、中國時報、中時新聞網、工商時報、中天新聞、中視、TVBS、風傳媒、中廣新聞網、梅花新聞網 |
+| **🟩 泛綠傾向** | 長期社論偏向本土執政立場、抗中主軸或自由／三立／民視／鏡系紙媒與網媒 | 自由時報、三立新聞、民視新聞、新頭殼（Newtalk）、太報、鏡週刊、鏡報、放言、民報 |
+| **⬜ 泛白／第三勢力** | 民眾黨官方新媒體或高比例聚焦第三勢力與國會攻防之媒體 | 民眾之聲、匯流新聞網（CNEWS） |
+| **🟨 公媒／通訊社與商業綜合** | 國家通訊社、公共媒體、獨立調查媒體或以商業流量／綜合即時為主之平台（※ 歸類於此不代表絕對無偏見，單篇報導仍依實際用詞納入分析） | 中央社（CNA）、公視新聞網（PTS）、中央廣播電臺、華視、台視、報導者、ETtoday、NOWnews、壹蘋新聞網、菱傳媒、上報、信傳媒、鏡新聞 |
+
+**3. 雙層交叉判讀原則**
+* **預設光譜不等於單篇定罪**：即使媒體長期具特定傾向，若在該議題中僅平實陳述數據與官方說法，AI 分析報告會明確肯定其實際報導表現；反之，公媒或商業媒體若使用強烈情緒化標題，一樣會被計入「標題情緒煽動度」。
+* 本光譜字典將隨台灣媒體生態變化與讀者意見持續滾動修正。
+            """)
+
         st.divider()
         st.markdown("""
         <div style="background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%); border:1px solid #334155; border-radius:12px; padding:20px 24px; text-align:center; margin-top:10px;">
             <div style="font-size:1.15rem; font-weight:800; color:#fde047; margin-bottom:6px;">
-                🛡️ 守護獨立中立，拒絕政黨業配介入
+                🛡️ 守護獨立運作，拒絕政黨業配介入
             </div>
             <div style="font-size:0.92rem; color:#cbd5e1; margin-bottom:14px;">
-                《政治解盲》由獨立系統全自動運作。若這份分析幫助你看清媒體風向，歡迎請 AI 喝杯咖啡，支持伺服器每日運算！
+                《政治解盲》由獨立系統全自動運作。若這份交叉比對幫助你看清媒體風向，歡迎請 AI 喝杯咖啡，支持伺服器每日運算！
             </div>
             <a href="https://vocus.cc/pay/donate/@unblindnews?donateSourceType=exclusiveLink" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 28px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
                 ☕ 請 AI 喝杯咖啡（支援 LINE Pay ／ 信用卡免註冊）
