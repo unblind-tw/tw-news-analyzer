@@ -130,6 +130,45 @@ def fetch_rss(query, max_items=45):
     return articles
 
 
+def fetch_topic_articles(hot_topic, pool):
+    """
+    針對選定議題抓取足夠樣本數的原生媒體報導：
+    若精準關鍵字於 24h 內不足 15 篇，自動放寬關鍵字與時間窗至 48h 並去重。
+    """
+    words = [w for w in hot_topic.split() if w]
+    short_topic = " ".join(words[:2]) if len(words) >= 2 else hot_topic
+
+    queries_to_try = [f"{hot_topic} when:24h"]
+    if short_topic != hot_topic:
+        queries_to_try.append(f"{short_topic} when:24h")
+    queries_to_try.append(f"{short_topic} when:48h")
+
+    # 若為 2 詞組合且不足，嘗試將 2 詞改為較寬鬆的 72h（僅在前面真的撈不到時觸發）
+    queries_to_try.append(f"{short_topic} when:72h")
+
+    merged = []
+    seen_keys = set()
+
+    for q in queries_to_try:
+        batch = fetch_rss(q, max_items=35)
+        for a in batch:
+            # 依「媒體名稱＋標題前16字」去重，避免同媒體微調標題重複計算
+            clean_title = a["title"].split(" - ")[0].strip()
+            dedup_key = (a["source"], clean_title[:16])
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
+                merged.append(a)
+        print(f"查詢「{q}」後，累計不重複原生報導：{len(merged)} 篇")
+        if len(merged) >= 15:
+            break
+
+    if len(merged) < 6:
+        print("樣本數仍過少，回退採用綜合政治新聞池前 25 篇")
+        return pool[:25]
+
+    return merged[:30]
+
+
 def call_gemini(prompt):
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -175,30 +214,31 @@ def main():
     print(f"近期已分析過的議題：{recent_topics_str}")
 
     broad_query = (
-        "(政治 OR 立法院 OR 行政院 OR 總統府 OR 國民黨 OR 民進黨 OR 民眾黨) when:12h"
+        "(政治 OR 立法院 OR 行政院 OR 總統府 OR 國民黨 OR 民進黨 OR 民眾黨) when:18h"
     )
-    pool = fetch_rss(broad_query, max_items=50)
+    pool = fetch_rss(broad_query, max_items=60)
     headlines_text = "\n".join([f"- [{a['source']}] {a['title']}" for a in pool])
 
     topic_prompt = f"""
-以下是台灣過去 12 小時內的最新政治新聞標題清單（已排除入口轉載平台，均為原生媒體）：
+以下是台灣過去 18 小時內的最新政治新聞標題清單（已排除入口轉載平台，均為原生媒體）：
 {headlines_text}
 
 我們在前幾期已經分析過以下議題：【{recent_topics_str}】
 
 請依照以下規則選出本期要分析的單一新聞事件：
-1. 先統計出目前報導量最大的前 3 名政治新聞事件。
-2. 優先選擇第 1 名；但如果第 1 名與【{recent_topics_str}】是同一個新聞事件（即使字面用詞略有不同），請直接排除它，改選擇報導量第 2 名（或第 3 名）的全新新聞事件！
-3. 唯一例外：如果舊議題在過去幾小時內發生了「重大結果翻轉」（例如：法案正式三讀通過、官員請辭、法院宣判結果出爐），才允許再次選擇，並請在關鍵字中加上最新進度。
+1. 優先挑選在清單中「有多家不同陣營媒體共同報導」、最具討論熱度的前 3 名政治事件。
+2. 優先選擇第 1 名；但如果第 1 名與【{recent_topics_str}】是同一個新聞事件（即使字面用詞略有不同），請直接排除它，改選第 2 名或第 3 名的全新事件。
+3. 唯一例外：如果舊議題發生了「重大結果翻轉」（例如：三讀通過、官員請辭、宣判出爐），才允許再次選擇。
+4. 【關鍵字長度嚴格限制】：請只回傳 **1 到 2 個核心專有名詞**（以 1 個空白分隔，總字數 2～6 字），**絕對不要加上第 3 個細節動詞**（例如寫「軍公教 加薪」即可，不要寫「軍公教 加薪 入帳」；寫「財劃法 協商」即可，不要寫「財劃法 朝野協商 破局」），以免搜尋條件太嚴苛導致漏抓新聞。
 
-請只回傳最終選定之事件的「核心搜尋關鍵字」（約 2 到 6 個字，以空白分隔，例如：「財劃法 朝野協商」或「總預算 覆議案」），不要加上任何標點符號或解釋文字。
+請只回傳最終選定的關鍵字，不要加上任何標點符號或解釋文字。
 """
-    hot_topic = call_gemini(topic_prompt).strip().replace('"', '').replace("'", "")
+    raw_topic = call_gemini(topic_prompt).strip().replace('"', '').replace("'", "")
+    # 程式端二次保險：最多只保留前 2 個空白分隔詞
+    hot_topic = " ".join(raw_topic.split()[:2])
     print(f"鎖定本時段分析議題：{hot_topic}")
 
-    topic_articles = fetch_rss(f"{hot_topic} when:24h", max_items=30)
-    if len(topic_articles) < 5:
-        topic_articles = pool[:25]
+    topic_articles = fetch_topic_articles(hot_topic, pool)
 
     topic_articles.sort(
         key=lambda x: x["timestamp"] if x["timestamp"] > 0 else 9999999999
@@ -221,11 +261,11 @@ def main():
 
 ### 🎯 本時段焦點政治議題：{hot_topic}
 **【多方對照事實摘要】**：抽離所有政黨情緒字眼，用 120 字以內還原此事件目前已確認的核心事實與各方爭點。
-**【議題主導陣營】**：請用「陣營名稱｜一句話原因（15字內）」格式填寫（例如：🟦 藍營主導戰場｜主動拋出法案時程逼宮執政黨，或 🟩 綠營發動反擊｜主打財政紀律質疑在野提案，或 ⬜ 白營內部矛盾｜地方主委公開倒戈引發爭議）。
-**【當事人表態對照】**（請依本事件實際交鋒之 2～3 位核心當事人、政黨或機關動態填寫，冒號前請直接寫出真實人名與職稱，切勿保留模板字眼，若無特定陣營參與請勿硬湊或寫無相關報導）：
-* 🟦/🟩/⬜/🏛️ 填寫實際當事人A姓名與職稱：用 35 字以內濃縮其最新表態或核心訴求。
-* 🟦/🟩/⬜/🏛️ 填寫實際當事人B姓名與職稱：用 35 字以內濃縮其最新表態或核心反駁。
-* 🟦/🟩/⬜/🏛️ 填寫實際當事人C或第三方評論（選填，若僅兩方交鋒可省略此行）：用 35 字以內濃縮其最新表態或關鍵數據。
+**【議題主導陣營】**：請用「陣營名稱｜一句話原因（15字內）」格式填寫（例如：🟦 藍營主導戰場｜主動拋出法案時程逼宮執政黨，或 🟩 綠營發動反擊｜主打財政紀律質疑在野提案，或 ⚔️ 朝野攻防拉鋸｜雙方針對預算與程序激烈交鋒）。
+**【當事人表態對照】**（嚴格規則：只允許列出實際參與事件的「政治人物、政黨、政府機關或民間團體」；**嚴禁將任何新聞媒體名稱如 TVBS、自由時報、聯合報、三立、中時等列入當事人！**若報導中實際有明確表態的當事人只有 2 位，請只列 2 行即可，切勿為了湊滿 3 行而硬塞媒體或寫無相關報導）：
+* 🟦/🟩/⬜/🏛️ 實際當事人A姓名或機關名稱：用 35 字以內濃縮其最新表態或核心訴求。
+* 🟦/🟩/⬜/🏛️ 實際當事人B姓名或機關名稱：用 35 字以內濃縮其最新表態或核心反駁。
+* 🟦/🟩/⬜/🏛️ 實際當事人C姓名或機關名稱（選填，若報導中無第3位明確當事人請直接省略此行）：用 35 字以內濃縮其表態或關鍵數據。
 
 ---
 
