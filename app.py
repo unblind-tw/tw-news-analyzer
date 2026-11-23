@@ -13,17 +13,24 @@ st.set_page_config(
 )
 
 # ==========================================
+# 🔗 外部導流與贊助連結設定區（修改這裡即可同步全站按鈕）
+# ==========================================
+LINE_ADD_URL = "https://lin.ee/PTTOEMY"
+DONATE_URL = "https://vocus.cc/pay/donate/@unblindnews?donateSourceType=exclusiveLink"
+
+# ==========================================
 # 📢 改版公告設定區（改成 True 即開啟進站彈跳小視窗）
 # ==========================================
 SHOW_UPDATE_BANNER = True   # 頂部可摺疊通知條（不擋畫面，推薦常駐）
 SHOW_UPDATE_POPUP = False   # 進站自動彈出小視窗（短期強提醒用，預設關閉）
-UPDATE_TITLE = "📢 【v1.2 透明化改版公告】剔除轉載平台、公開完整媒體分類標準"
+UPDATE_TITLE = "📢 【v1.3 升級公告】LINE 隨手解盲機器人上線・全面剔除轉載平台"
 UPDATE_NOTES = """
-感謝熱心讀者回饋與抓蟲！本次系統完成以下 **3 項核心透明化升級**：
+感謝熱心讀者回饋與抓蟲！本次系統完成以下 **4 項核心升級**：
 
-1. **🚫 全面剔除新聞轉載入口平台**：系統已自動過濾 `LINE TODAY`、`Yahoo`、`MSN`、`PChome`、`蕃新聞` 等聚合轉載網站，只統計原始發稿之原生媒體，避免將特定陣營報導誤歸類或重複計算。
-2. **⚖️ 新增「分類方法論與光譜公開」分頁**：直接於下方第 5 個分頁完整公開所有媒體歸類清單與判讀原則，接受所有讀者公開檢驗與指正。
-3. **🏷️ 更精準的分類命名與媒體字典擴充**：將「中立／綜合」調整為 **「公媒／通訊社與商業綜合」**（不替任何單一媒體背書絕對中立），並補齊「鏡報、菱傳媒、上報、信傳媒」等媒體資料。
+1. **💬 全新推出《政治解盲》LINE 隨手查核機器人**：直接貼上新聞網址或關鍵字，5 秒排除轉載平台並拆解藍綠白盲點；還可免費拉進親友群組（平常完全靜默，輸入 `解盲 關鍵字` 才回應）。
+2. **🚫 全面剔除新聞轉載入口平台**：系統已自動過濾 `LINE TODAY`、`Yahoo`、`MSN`、`PChome`、`蕃新聞` 等聚合轉載網站，只統計原始發稿之原生媒體，避免誤歸類或重複計算。
+3. **⚖️ 新增「分類方法論與光譜公開」分頁**：直接於下方第 5 個分頁完整公開所有媒體歸類清單與判讀原則，接受所有讀者公開檢驗與指正。
+4. **🏷️ 更精準的分類命名與媒體字典擴充**：將「中立／綜合」調整為 **「公媒／通訊社與商業綜合」**（不替任何單一媒體背書絕對中立），並補齊「鏡報、菱傳媒、上報、信傳媒」等媒體資料。
 """
 
 if SHOW_UPDATE_POPUP and hasattr(st, "dialog"):
@@ -44,6 +51,45 @@ st.markdown("""
 [data-testid="stDecoration"] { display: none !important; }
 #MainMenu { visibility: hidden !important; }
 footer { visibility: hidden !important; }
+
+/* LINE 隨手解盲導流橫幅 */
+.line-promo-banner {
+    background: linear-gradient(90deg, #064e3b 0%, #0f172a 100%);
+    border: 1px solid #10b981;
+    border-radius: 12px;
+    padding: 14px 20px;
+    margin: 8px 0 18px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.line-promo-title {
+    color: #6ee7b7;
+    font-weight: 800;
+    font-size: 0.98rem;
+}
+.line-promo-desc {
+    color: #cbd5e1;
+    font-size: 0.86rem;
+    margin-top: 4px;
+    line-height: 1.5;
+}
+.line-promo-btn {
+    background-color: #06c755;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-weight: 800;
+    font-size: 0.9rem;
+    padding: 10px 18px;
+    border-radius: 8px;
+    white-space: nowrap;
+    display: inline-block;
+}
+.line-promo-btn:hover {
+    background-color: #05b34c;
+}
 
 /* 議題主標題橫幅卡片 */
 .topic-banner {
@@ -451,6 +497,17 @@ if SHOW_UPDATE_BANNER:
     with st.expander(f"{UPDATE_TITLE}（點擊展開查看）", expanded=False):
         st.markdown(UPDATE_NOTES)
 
+# 頂部 LINE 隨手解盲導流橫幅
+st.markdown(f"""
+<div class="line-promo-banner">
+    <div>
+        <div class="line-promo-title">💬 新功能上線｜《政治解盲》LINE 隨手查核機器人（免費免註冊）</div>
+        <div class="line-promo-desc">看到疑似帶風向的新聞？直接轉傳網址或輸入關鍵字，5 秒拆解藍綠白盲點；還可免費拉進親友群組（平常靜默不吵人）。</div>
+    </div>
+    <a href="{LINE_ADD_URL}" target="_blank" class="line-promo-btn">＋ 加入 LINE 免費解盲</a>
+</div>
+""", unsafe_allow_html=True)
+
 data_file = "news_history.json"
 
 if not os.path.exists(data_file):
@@ -474,6 +531,19 @@ else:
                 format_func=lambda i: options[i]
             )
             st.divider()
+            st.markdown(f"""
+            <div style="background-color:#064e3b; border:1px solid #10b981; border-left:4px solid #06c755; padding:14px; border-radius:10px; margin-bottom:14px;">
+                <div style="font-weight:700; color:#6ee7b7; font-size:0.95rem; margin-bottom:6px;">
+                    💬 LINE 隨手解盲機器人
+                </div>
+                <div style="font-size:0.83rem; color:#e2e8f0; line-height:1.5; margin-bottom:10px;">
+                    轉傳新聞網址或輸入關鍵字，5 秒攤開藍綠白盲點！支援拉進親友群組（點名才回話）。
+                </div>
+                <a href="{LINE_ADD_URL}" target="_blank" style="display:block; text-align:center; background-color:#06c755; color:#ffffff; font-weight:800; padding:9px 12px; border-radius:6px; text-decoration:none; font-size:0.88rem;">
+                    ＋ 加入 LINE 官方帳號
+                </a>
+            </div>
+            """, unsafe_allow_html=True)
             st.subheader("📊 儀表板閱讀指南")
             st.caption("• 情緒煽動度：統計標題含強烈情緒字眼之比例，防範標題殺人。")
             st.caption("• 議題主導陣營：判讀本波輿論戰由哪一方設定戰場。")
@@ -481,7 +551,7 @@ else:
             st.caption("• 盲點雙欄卡：左右對照藍綠受眾各自被隱藏的資訊。")
             st.caption("• 分類透明公開：點擊第 5 分頁可查閱完整媒體歸類清單。")
             st.divider()
-            st.markdown("""
+            st.markdown(f"""
             <div style="background-color:#1e293b; border:1px solid #334155; border-left:4px solid #eab308; padding:14px; border-radius:10px;">
                 <div style="font-weight:700; color:#fde047; font-size:0.95rem; margin-bottom:6px;">
                     ☕ 支持《政治解盲》獨立運作
@@ -489,7 +559,7 @@ else:
                 <div style="font-size:0.83rem; color:#cbd5e1; line-height:1.5; margin-bottom:10px;">
                     為拒絕政黨與財團介入，本站絕不刊登政治業配。歡迎小額贊助支持 AI 每日運算成本！
                 </div>
-                <a href="https://vocus.cc/pay/donate/@unblindnews?donateSourceType=exclusiveLink" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:9px 12px; border-radius:6px; text-decoration:none; font-size:0.88rem;">
+                <a href="{DONATE_URL}" target="_blank" style="display:block; text-align:center; background-color:#eab308; color:#0f172a; font-weight:800; padding:9px 12px; border-radius:6px; text-decoration:none; font-size:0.88rem;">
                     💛 請 AI 喝杯咖啡（LINE Pay／刷卡）
                 </a>
             </div>
@@ -822,8 +892,8 @@ else:
             )
             st.markdown("""
 **1. 嚴格剔除純轉載入口網站**
-* 系統在抓取新聞時，會自動排除 **`LINE TODAY`、`LINE新聞`、`Yahoo`、`MSN`、`PChome`、`蕃新聞`、`Match生活網`、`HiNet`** 等新聞聚合轉載平台。
-* 目的在於避免特定陣營原生媒體（例如自由時報、中時、鏡報等）透過入口網站轉載後，被誤歸入綜合分類或造成聲量重複計算。
+- 系統在抓取新聞時，會自動排除 **`LINE TODAY`、`LINE新聞`、`Yahoo`、`MSN`、`PChome`、`蕃新聞`、`Match生活網`、`HiNet`** 等新聞聚合轉載平台。
+- 目的在於避免特定陣營原生媒體（例如自由時報、中時、鏡報等）透過入口網站轉載後，被誤歸入綜合分類或造成聲量重複計算。
 
 **2. 系統現行四大媒體觀測群組公開清單**
 
@@ -835,21 +905,26 @@ else:
 | **🟨 公媒／通訊社與商業綜合** | 國家通訊社、公共媒體、獨立調查媒體或以商業流量／綜合即時為主之平台（※ 歸類於此不代表絕對無偏見，單篇報導仍依實際用詞納入分析） | 中央社（CNA）、公視新聞網（PTS）、中央廣播電臺、華視、台視、報導者、ETtoday、NOWnews、壹蘋新聞網、菱傳媒、上報、信傳媒、鏡新聞 |
 
 **3. 雙層交叉判讀原則**
-* **預設光譜不等於單篇定罪**：即使媒體長期具特定傾向，若在該議題中僅平實陳述數據與官方說法，AI 分析報告會明確肯定其實際報導表現；反之，公媒或商業媒體若使用強烈情緒化標題，一樣會被計入「標題情緒煽動度」。
-* 本光譜字典將隨台灣媒體生態變化與讀者意見持續滾動修正。
+- **預設光譜不等於單篇定罪**：即使媒體長期具特定傾向，若在該議題中僅平實陳述數據與官方說法，AI 分析報告會明確肯定其實際報導表現；反之，公媒或商業媒體若使用強烈情緒化標題，一樣會被計入「標題情緒煽動度」。
+- 本光譜字典將隨台灣媒體生態變化與讀者意見持續滾動修正。
             """)
 
         st.divider()
-        st.markdown("""
+        st.markdown(f"""
         <div style="background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%); border:1px solid #334155; border-radius:12px; padding:20px 24px; text-align:center; margin-top:10px;">
             <div style="font-size:1.15rem; font-weight:800; color:#fde047; margin-bottom:6px;">
                 🛡️ 守護獨立運作，拒絕政黨業配介入
             </div>
-            <div style="font-size:0.92rem; color:#cbd5e1; margin-bottom:14px;">
-                《政治解盲》由獨立系統全自動運作。若這份交叉比對幫助你看清媒體風向，歡迎請 AI 喝杯咖啡，支持伺服器每日運算！
+            <div style="font-size:0.92rem; color:#cbd5e1; margin-bottom:16px;">
+                《政治解盲》由獨立系統全自動運作。歡迎免費加入 LINE 機器人隨手查核，或請 AI 喝杯咖啡支持每日運算！
             </div>
-            <a href="https://vocus.cc/pay/donate/@unblindnews?donateSourceType=exclusiveLink" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 28px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
-                ☕ 請 AI 喝杯咖啡（支援 LINE Pay ／ 信用卡免註冊）
-            </a>
+            <div style="display:flex; justify-content:center; flex-wrap:wrap; gap:12px;">
+                <a href="{LINE_ADD_URL}" target="_blank" style="display:inline-block; background-color:#06c755; color:#ffffff; font-weight:800; padding:10px 24px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
+                    💬 加入 LINE 隨手解盲（免費）
+                </a>
+                <a href="{DONATE_URL}" target="_blank" style="display:inline-block; background-color:#eab308; color:#0f172a; font-weight:800; padding:10px 24px; border-radius:8px; text-decoration:none; font-size:0.95rem;">
+                    ☕ 請 AI 喝杯咖啡（LINE Pay／刷卡）
+                </a>
+            </div>
         </div>
         """, unsafe_allow_html=True)
