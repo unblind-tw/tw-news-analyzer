@@ -16,7 +16,7 @@ st.set_page_config(
 # ==========================================
 # 🔗 外部導流與贊助連結設定區（修改這裡即可同步全站按鈕）
 # ==========================================
-LINE_ADD_URL = "https://lin.ee/請換成你的LINE加好友網址"
+LINE_ADD_URL = "https://lin.ee/PTTOEMY"
 DONATE_URL = "https://vocus.cc/pay/donate/@unblindnews?donateSourceType=exclusiveLink"
 
 # ==========================================
@@ -360,35 +360,32 @@ footer { visibility: hidden !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# 排除純轉載入口平台（確保前台歷史資料也即時過濾）
-AGGREGATOR_BLACKLIST = [
-    "LINE TODAY", "LINE新聞", "Yahoo", "MSN", "PChome",
-    "蕃新聞", "Match生活網", "HiNet", "Hinet"
-]
+# ==========================================
+# 媒體光譜共用規則（與 fetch_and_analyze.py、LINE 機器人 worker.js 共用 media_spectrum.json）
+# 轉載入口黑名單、媒體光譜、陣營關鍵字、標題情緒詞典都在該檔維護，修改只要改一處
+# ==========================================
+RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media_spectrum.json")
 
-GREEN_KEYS = [
-    "泛綠", "深綠", "偏綠", "自由", "三立", "民視",
-    "新頭殼", "Newtalk", "太報", "鏡週刊", "鏡報", "放言", "民報"
-]
-BLUE_KEYS = [
-    "泛藍", "深藍", "親中", "聯合", "UDN", "udn", "中時", "中國時報",
-    "中天", "TVBS", "風傳媒", "中視", "中廣", "工商", "經濟日報", "梅花"
-]
-WHITE_KEYS = ["泛白", "民眾", "匯流", "CNEWS"]
 
-# v2.0 精準政治情緒詞典（移除「救、驚、爆、轟、嗆」等高誤判單字，改用明確情緒詞組）
-SENSATIONAL_WORDS = [
-    "狠酸", "狂酸", "酸爆", "打臉", "洗臉", "翻車", "大翻車",
-    "砲轟", "怒轟", "痛轟", "轟爆", "痛批", "怒批", "狠批", "重批",
-    "怒嗆", "痛嗆", "狂嗆", "開嗆", "狠嗆", "反嗆", "嗆爆",
-    "怒斥", "痛斥", "大罵", "怒罵", "痛罵", "開罵",
-    "踢爆", "怒爆", "驚爆", "爆氣", "引爆口水", "驚傳內幕",
-    "急了", "傻眼", "跳腳", "開戰", "開撕", "互槓", "吵成一團", "鬧翻",
-    "強行", "硬闖", "闖關", "黑箱", "自肥", "掏空", "神隱", "打假球",
-    "變調", "破局", "打槍", "切割", "倒戈", "護航", "硬拗", "甩鍋",
-    "鬆一口氣", "炒不起來", "難發酵", "力拚", "力拼", "逼宮", "出征",
-    "！", "!"
-]
+@st.cache_data(show_spinner=False)
+def load_media_rules(path, mtime):
+    """mtime（檔案修改時間）只用來讓規則檔更新時自動失效快取。"""
+    with open(path, "r", encoding="utf-8") as f:
+        rules = json.load(f)
+    # 名稱長的優先比對，確保「中天新聞網」優先於「中天新聞」
+    rules["_media_keys"] = sorted(rules["media"].keys(), key=len, reverse=True)
+    return rules
+
+
+if not os.path.exists(RULES_FILE):
+    st.error("⚠️ 找不到 media_spectrum.json（媒體光譜共用規則檔），請上傳到 GitHub 專案根目錄、與 app.py 同一層。")
+    st.stop()
+
+MEDIA_RULES = load_media_rules(RULES_FILE, os.path.getmtime(RULES_FILE))
+CAMP_LABELS = MEDIA_RULES["camp_labels"]
+AGGREGATOR_BLACKLIST = MEDIA_RULES["aggregator_blacklist"]
+# v2.0 精準政治情緒詞典（已移除「救、驚、爆、轟、嗆」等高誤判單字，改用明確情緒詞組）
+SENSATIONAL_WORDS = MEDIA_RULES["sensational_words"]
 
 _SENSATIONAL_PATTERN = re.compile(
     "(" + "|".join(re.escape(w) for w in sorted(SENSATIONAL_WORDS, key=len, reverse=True)) + ")"
@@ -434,16 +431,29 @@ def highlight_sensational_html(title, source=""):
 
 
 def classify_camp(source_item):
-    tag = source_item.get("bias_tag", "")
-    name = source_item.get("source", "")
-    text = f"{name} {tag}"
-    if any(k in text for k in GREEN_KEYS):
-        return "泛綠傾向"
-    if any(k in text for k in BLUE_KEYS):
-        return "泛藍傾向"
-    if any(k in text for k in WHITE_KEYS):
-        return "泛白／第三勢力"
-    return "公媒／通訊社與商業綜合"
+    """與 fetch_and_analyze.py、worker.js 同一套規則：媒體名稱最長匹配 → 關鍵字備援 → 公媒／綜合。"""
+    name = source_item.get("source", "") or ""
+    for key in MEDIA_RULES["_media_keys"]:
+        if key in name:
+            return CAMP_LABELS[MEDIA_RULES["media"][key]["camp"]]
+    for camp in ("green", "blue", "white"):
+        if any(k in name for k in MEDIA_RULES["keyword_fallback"][camp]):
+            return CAMP_LABELS[camp]
+    return CAMP_LABELS["neutral"]
+
+
+def calc_spectrum_percentages(counts):
+    """最大餘數法（Largest Remainder Method）：加總剛好 100%，且 0 篇的陣營一定是 0%。"""
+    total = sum(counts)
+    if total <= 0:
+        return [0] * len(counts)
+    raw = [c / total * 100 for c in counts]
+    pcts = [int(r) for r in raw]
+    remain = 100 - sum(pcts)
+    order = sorted(range(len(counts)), key=lambda i: raw[i] - pcts[i], reverse=True)
+    for i in order[:remain]:
+        pcts[i] += 1
+    return pcts
 
 
 def calc_emotion_metric(sources):
@@ -607,6 +617,7 @@ def format_blindspot_items(raw_text):
     return "".join(rendered)
 
 
+@st.cache_data(show_spinner=False)
 def parse_report_data(report_md):
     cleaned = re.sub(r"^好的，.*?\n+", "", report_md.strip())
 
@@ -620,7 +631,7 @@ def parse_report_data(report_md):
         summary = sum_match.group(1).strip().strip("*")
 
     # 同時相容 v1.2「消息可靠度評分（0～100分）：85分」與 v2.0「消息可靠度評分：84分」
-    score = 75
+    score = None  # 找不到評分時不顯示假分數（舊版預設 75 分；AI 輸出中斷的報告會沒有評分）
     score_pattern = r"可靠度評分(?:\s*[\(（][^\)）]*[\)）])?[\*\s]*[：:]\s*\*?(\d{1,3})\s*分"
     score_match = re.search(score_pattern, cleaned)
     if score_match:
@@ -687,8 +698,71 @@ def parse_report_data(report_md):
     }
 
 
+# Streamlit 1.37 以上的 st.fragment：第 4 分頁切換篩選時只重跑該分頁，不必整頁重跑
+_fragment = getattr(st, "fragment", None) or getattr(st, "experimental_fragment", None) or (lambda f: f)
+
+CAMP_BADGE = {
+    "泛藍傾向": "🟦 泛藍",
+    "泛綠傾向": "🟩 泛綠",
+    "泛白／第三勢力": "⬜ 泛白",
+    "公媒／通訊社與商業綜合": "🟨 公媒/綜合"
+}
+
+
+@_fragment
+def render_source_list(sources, source_camps):
+    st.markdown("#### 🔍 原始原生新聞清單（標題情緒詞透明高亮檢核）")
+    st.caption("💡 紅底標記即為計入「標題情緒煽動度」之政治情緒用詞，讀者可直接核對原標題是否涉及標題殺人。")
+
+    f_col1, f_col2 = st.columns([3, 1.3])
+    with f_col1:
+        filter_camp = st.radio(
+            "點選篩選特定媒體分類：",
+            [
+                "全部顯示",
+                "🟦 泛藍傾向",
+                "🟩 泛綠傾向",
+                "⬜ 泛白／第三勢力",
+                "🟨 公媒／通訊社與商業綜合"
+            ],
+            horizontal=True,
+            key="source_filter_camp"
+        )
+    with f_col2:
+        only_emo = st.checkbox("🔴 僅顯示含情緒煽動詞之標題", value=False, key="source_only_emo")
+
+    rows = []
+    for idx, (src, c_type) in enumerate(zip(sources, source_camps), 1):
+        if filter_camp != "全部顯示" and not filter_camp.endswith(c_type):
+            continue
+
+        highlighted_title, emo_hits = highlight_sensational_html(
+            src.get("title", ""), src.get("source", "")
+        )
+        if only_emo and not emo_hits:
+            continue
+
+        badge = CAMP_BADGE.get(c_type, "🟨 公媒/綜合")
+        safe_src = html.escape(src.get("source", "未知媒體"))
+        safe_time = html.escape(src.get("time_str", "未知時間"))
+        safe_link = html.escape(src.get("link", "#"), quote=True)
+        emo_tag = '<span class="emo-badge">🎭 含情緒詞</span>' if emo_hits else ""
+        first_tag = '<span class="first-badge">🏆 全網首發</span>' if idx == 1 else ""
+        rows.append(
+            f'<div class="news-row"><code>#{idx:02d}</code> <strong>{safe_time}</strong> ｜ {badge} '
+            f'<strong>[{safe_src}]</strong> <a href="{safe_link}" target="_blank">{highlighted_title}</a> '
+            f'{emo_tag}{first_tag}</div>'
+        )
+
+    if rows:
+        # 一次輸出全部列（原本每篇各呼叫一次 st.markdown，約 30 次前端渲染）
+        st.markdown("\n".join(rows), unsafe_allow_html=True)
+    else:
+        st.info("此篩選條件下無符合之原始報導。")
+
+
 st.title("🔍 政治解盲")
-st.caption("每日早（08:00）、中（12:30）、晚（19:00）自動鎖定全台最大政治議題，深度比對藍、綠、白與公媒／商業媒體報導，攤開同溫層盲區，還原多方對照的事實全貌。")
+st.caption("每日早、中、晚（約 07:50、11:50、18:50）自動鎖定全台最大政治議題，深度比對藍、綠、白與公媒／商業媒體報導，攤開同溫層盲區，還原多方對照的事實全貌。")
 
 if SHOW_UPDATE_BANNER:
     with st.expander(f"{UPDATE_TITLE}（點擊展開查看）", expanded=False):
@@ -705,15 +779,34 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-data_file = "news_history.json"
+data_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "news_history.json")
+
+
+@st.cache_data(show_spinner=False)
+def load_history(path, mtime):
+    """以檔案修改時間當快取鍵：檔案沒變就不重讀，GitHub Actions 推送新資料後自動更新。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, list):
+            return []
+        # 清除舊紀錄中 AI 暴衝輸出的連續空白（曾單期 200 萬字），避免拖慢頁面與報告解析
+        for entry in data:
+            if isinstance(entry, dict) and isinstance(entry.get("report"), str):
+                entry["report"] = re.sub(r"[ \t　]{8,}", " ", entry["report"])
+        return data
+    except (OSError, json.JSONDecodeError):
+        return None
+
 
 if not os.path.exists(data_file):
     st.info("⏳ 系統正在準備第一份報告！請先至 GitHub Actions 執行一次 Run workflow。")
 else:
-    with open(data_file, "r", encoding="utf-8") as f:
-        history = json.load(f)
+    history = load_history(data_file, os.path.getmtime(data_file))
 
-    if not history:
+    if history is None:
+        st.error("⚠️ news_history.json 讀取失敗（可能正在更新或格式損壞），請稍後重新整理頁面。")
+    elif not history:
         st.warning("目前尚無歷史資料。")
     else:
         with st.sidebar:
@@ -769,7 +862,8 @@ else:
         fulltext_count = int(current.get("fulltext_count", 0) or 0)
 
         parsed = parse_report_data(current.get("report", ""))
-        camp_counts = Counter(classify_camp(s) for s in sources)
+        source_camps = [classify_camp(s) for s in sources]
+        camp_counts = Counter(source_camps)
 
         valid_sources = [
             s for s in sources
@@ -790,14 +884,17 @@ else:
             <div class="topic-label">🔥 本時段最大政治議題</div>
             <div class="topic-title">{html.escape(current["topic"])}</div>
             <span class="topic-meta">
-                📅 {current["period"]}｜{current["date_str"]}（跨媒體比對 {len(sources)} 篇原生報導{fulltext_note}{filter_note}）
+                📅 {html.escape(str(current.get("period", "")))}｜{html.escape(str(current.get("date_str", "")))}（跨媒體比對 {len(sources)} 篇原生報導{fulltext_note}{filter_note}）
             </span>
         </div>
         """, unsafe_allow_html=True)
 
         # 第二排：四大戰情指標
         score = parsed["score"]
-        if score >= 75:
+        score_display = "—" if score is None else str(score)
+        if score is None:
+            score_label = "⚪ 本期報告不完整，未評分"
+        elif score >= 75:
             score_label = "🟢 高可查證度（具名與跨媒事實為主）"
         elif score >= 60:
             score_label = "🟡 中等（夾雜政黨推論與解讀）"
@@ -812,7 +909,7 @@ else:
             st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-head">🛡️ 資訊可查證度</div>
-                <div class="metric-val">{score} / 100 分</div>
+                <div class="metric-val">{score_display} / 100 分</div>
                 <div class="metric-sub">{score_label}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -828,8 +925,8 @@ else:
             st.markdown(f"""
             <div class="metric-card">
                 <div class="metric-head">📣 議題主導陣營</div>
-                <div class="metric-val">{leader_val}</div>
-                <div class="metric-sub">{leader_label}</div>
+                <div class="metric-val">{html.escape(leader_val)}</div>
+                <div class="metric-sub">{html.escape(leader_label)}</div>
             </div>
             """, unsafe_allow_html=True)
         with c4:
@@ -837,7 +934,7 @@ else:
             <div class="metric-card">
                 <div class="metric-head">🥇 最早首發媒體</div>
                 <div class="metric-val">{html.escape(first_source["source"])}</div>
-                <div class="metric-sub">🕒 首發時間：{first_source["time_str"][-5:]}</div>
+                <div class="metric-sub">🕒 首發時間：{html.escape(str(first_source.get("time_str", ""))[-5:])}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -876,17 +973,16 @@ else:
 
         with col_left:
             st.subheader("🌈 媒體立場報導聲量光譜")
-            total = max(len(sources), 1)
 
             n_blue = camp_counts["泛藍傾向"]
             n_white = camp_counts["泛白／第三勢力"]
             n_other = camp_counts["公媒／通訊社與商業綜合"]
             n_green = camp_counts["泛綠傾向"]
 
-            p_blue = round(n_blue / total * 100)
-            p_white = round(n_white / total * 100)
-            p_other = round(n_other / total * 100)
-            p_green = max(0, 100 - p_blue - p_white - p_other)
+            # 最大餘數法：四項加總剛好 100%，0 篇的陣營不會因四捨五入誤差冒出 1%
+            p_blue, p_white, p_other, p_green = calc_spectrum_percentages(
+                [n_blue, n_white, n_other, n_green]
+            )
 
             def seg_label(name, pct):
                 if pct >= 14:
@@ -1061,10 +1157,13 @@ else:
 
         with tab3:
             st.markdown("#### 🔗 源頭追蹤與四維度資訊可查證度檢核")
-            st.progress(
-                parsed["score"] / 100,
-                text=f"🛡️ 本議題資訊可查證度總分：{parsed['score']} / 100 分"
-            )
+            if parsed["score"] is None:
+                st.info("⚪ 本期 AI 報告輸出不完整，未產生可查證度評分（請以下方內容與原始報導為準）。")
+            else:
+                st.progress(
+                    parsed["score"] / 100,
+                    text=f"🛡️ 本議題資訊可查證度總分：{parsed['score']} / 100 分"
+                )
 
             # v2.0 四維度拆解儀表板（各 25 分，舊期無資料時自動略過）
             if parsed["score_breakdown"]:
@@ -1093,63 +1192,7 @@ else:
                 st.markdown(parsed["cleaned"])
 
         with tab4:
-            st.markdown("#### 🔍 原始原生新聞清單（標題情緒詞透明高亮檢核）")
-            st.caption("💡 紅底標記即為計入「標題情緒煽動度」之政治情緒用詞，讀者可直接核對原標題是否涉及標題殺人。")
-
-            f_col1, f_col2 = st.columns([3, 1.3])
-            with f_col1:
-                filter_camp = st.radio(
-                    "點選篩選特定媒體分類：",
-                    [
-                        "全部顯示",
-                        "🟦 泛藍傾向",
-                        "🟩 泛綠傾向",
-                        "⬜ 泛白／第三勢力",
-                        "🟨 公媒／通訊社與商業綜合"
-                    ],
-                    horizontal=True
-                )
-            with f_col2:
-                only_emo = st.checkbox("🔴 僅顯示含情緒煽動詞之標題", value=False)
-
-            camp_badge = {
-                "泛藍傾向": "🟦 泛藍",
-                "泛綠傾向": "🟩 泛綠",
-                "泛白／第三勢力": "⬜ 泛白",
-                "公媒／通訊社與商業綜合": "🟨 公媒/綜合"
-            }
-
-            shown_count = 0
-            for idx, src in enumerate(sources, 1):
-                c_type = classify_camp(src)
-                if filter_camp != "全部顯示" and not filter_camp.endswith(c_type):
-                    continue
-
-                highlighted_title, emo_hits = highlight_sensational_html(
-                    src.get("title", ""), src.get("source", "")
-                )
-                if only_emo and not emo_hits:
-                    continue
-
-                shown_count += 1
-                badge = camp_badge.get(c_type, "🟨 公媒/綜合")
-                safe_src = html.escape(src.get("source", "未知媒體"))
-                safe_time = html.escape(src.get("time_str", "未知時間"))
-                safe_link = html.escape(src.get("link", "#"), quote=True)
-                emo_tag = '<span class="emo-badge">🎭 含情緒詞</span>' if emo_hits else ""
-                first_tag = '<span class="first-badge">🏆 全網首發</span>' if idx == 1 else ""
-
-                st.markdown(f"""
-                <div class="news-row">
-                    <code>#{idx:02d}</code> <strong>{safe_time}</strong> ｜ {badge}
-                    <strong>[{safe_src}]</strong>
-                    <a href="{safe_link}" target="_blank">{highlighted_title}</a>
-                    {emo_tag}{first_tag}
-                </div>
-                """, unsafe_allow_html=True)
-
-            if shown_count == 0:
-                st.info("此篩選條件下無符合之原始報導。")
+            render_source_list(sources, source_camps)
 
         with tab5:
             st.markdown("#### ⚖️ 媒體光譜分類方法論與透明聲明")
