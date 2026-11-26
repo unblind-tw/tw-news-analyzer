@@ -8,14 +8,28 @@ on:
     - cron: '23 4 * * *'
     # 台灣時間 18:53 (UTC 10:53) 晚報 — 避開 19:00 整點尖峰
     - cron: '53 10 * * *'
+  # 主要由 cron-job.org 透過 GitHub API 觸發（07:45／11:45／18:45）；上面的 schedule 只當備援，
+  # 同一時段已有報告時程式會自動略過，不會重複產生、也不會多花 Gemini 費用
   workflow_dispatch:
+    inputs:
+      force:
+        description: "同一時段已有報告時仍強制重跑"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
+# 同一時間只跑一份：手動執行（workflow_dispatch）與排程撞在一起時排隊，避免 push 衝突
+concurrency:
+  group: daily-news-analyzer
+  cancel-in-progress: false
+
 jobs:
   analyze_news:
     runs-on: ubuntu-latest
+    # 網路或 AI 異常卡住時，最多 20 分鐘就中止，不浪費 Actions 分鐘數
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,6 +45,7 @@ jobs:
       - name: Run News Fetch and Analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_RUN: ${{ github.event.inputs.force }}
         run: python fetch_and_analyze.py
 
       - name: Commit and Push updated JSON
