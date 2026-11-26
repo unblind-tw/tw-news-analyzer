@@ -6,6 +6,7 @@ import time
 import urllib.parse
 import xml.etree.ElementTree as ET
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone, timedelta
 import requests
@@ -15,22 +16,27 @@ TW_TZ = timezone(timedelta(hours=8))
 DATA_FILE = "news_history.json"
 
 # 主分析模型設定（每天僅跑 3 次；若未來想更進一步提升文筆可改為 gemini-2.5-pro）
-TOPIC_MODEL = "gemini-2.5-flash"
-ANALYSIS_MODEL = "gemini-2.5-flash"
+# 可用 GitHub Secrets／環境變數 GEMINI_MODEL 一次切換模型（換模型前請先手動跑一次 workflow 確認輸出格式）
+TOPIC_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+ANALYSIS_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 ANALYSIS_THINKING_BUDGET = 4096
+GEMINI_MAX_ATTEMPTS = 3
+GEMINI_BACKOFF_SECONDS = [10, 30]  # 限流（429）或暫時錯誤時的等待秒數
+# 輸出上限（含思考 token）：防止 AI 暴衝輸出空白（曾單期輸出 200 萬個空白、報告被截斷）
+TOPIC_MAX_OUTPUT_TOKENS = 512
+ANALYSIS_MAX_OUTPUT_TOKENS = 16384  # 思考 4096＋報告；正常報告約 4～6 千 token
+# 手動執行 workflow 時勾選 force 才會在同一時段重跑
+FORCE_RUN = os.environ.get("FORCE_RUN", "").strip().lower() == "true"
 
 # 內文抓取上限（跨 4 陣營各最多抓 2 篇，兼顧深度與執行速度）
 MAX_FULLTEXT_PER_CAMP = 2
 MAX_FULLTEXT_TOTAL = 8
 MAX_EXCERPT_CHARS = 750
 
-# ==========================================
-# 純新聞轉載入口黑名單（只保留原始發稿原生媒體）
-# ==========================================
-AGGREGATOR_BLACKLIST = [
-    "LINE TODAY", "LINE新聞", "Yahoo", "MSN", "PChome",
-    "蕃新聞", "Match生活網", "HiNet", "Hinet"
-]
+# 內文抓取：單頁最多讀取位元組數、並行執行緒數、每陣營最多嘗試幾家媒體
+MAX_PAGE_BYTES = 400_000
+FETCH_WORKERS = 8
+MAX_CANDIDATES_PER_CAMP = 6
 
 # 較友善、易成功抓取純文字內文的台灣主流媒體網域（優先抽取內文）
 SCRAPER_FRIENDLY_DOMAINS = [
@@ -51,72 +57,26 @@ BOILERPLATE_HINTS = [
 ]
 
 # ==========================================
-# 台灣主要原生媒體預設政治光譜字典（公開透明、持續滾動修正）
+# 媒體光譜共用規則（官網 app.py、本程式、LINE 機器人 worker.js 共用 media_spectrum.json）
+# 轉載入口黑名單、媒體光譜字典、陣營關鍵字都在該檔維護，修改分類只要改一處
 # ==========================================
-MEDIA_SPECTRUM = {
-    # 泛藍／偏在野監督／兩岸溫和派傾向
-    "聯合報": "泛藍傾向（傳統四大報，偏重在野監督與體制穩定）",
-    "聯合新聞網": "泛藍傾向（聯合報系）",
-    "udn": "泛藍傾向（聯合報系）",
-    "UDN": "泛藍傾向（聯合報系）",
-    "經濟日報": "泛藍／財經務實傾向（聯合報系）",
-    "中國時報": "泛藍／親中傾向（旺中集團，鮮明監督執政黨）",
-    "中時新聞網": "泛藍／親中傾向（旺中集團）",
-    "工商時報": "泛藍／財經產業界傾向（旺中集團）",
-    "中天新聞": "深藍／強烈監督執政黨傾向（旺中集團）",
-    "中天新聞網": "深藍／強烈監督執政黨傾向（旺中集團）",
-    "中視": "泛藍傾向（旺中集團旗下老三台）",
-    "TVBS": "泛藍／商業綜合傾向（關注藍營動態與民生監督）",
-    "TVBS新聞網": "泛藍／商業綜合傾向",
-    "風傳媒": "泛藍白／批判執政黨傾向（政論與幕後分析居多）",
-    "梅花新聞網": "泛藍傾向",
-    "中廣新聞網": "泛藍傾向",
+RULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media_spectrum.json")
 
-    # 泛綠／偏執政本土／抗中保台傾向
-    "自由時報": "泛綠／本土派傾向（傳統四大報，鮮明支持本土執政與抗中）",
-    "三立新聞網": "泛綠傾向（親執政黨，常聚焦批判藍白陣營）",
-    "三立新聞": "泛綠傾向",
-    "民視新聞網": "泛綠／深綠本土傾向（鮮明支持台灣主體性與執政黨）",
-    "民視新聞": "泛綠／深綠本土傾向",
-    "新頭殼": "泛綠／本土派傾向（Newtalk，關注政黨攻防）",
-    "Newtalk": "泛綠／本土派傾向",
-    "太報": "泛綠／本土自由派傾向",
-    "鏡週刊": "偏綠／揭弊調查傾向（常進行政商黑幕調查報導）",
-    "鏡報": "偏綠／揭弊與政經網媒（鏡傳媒體系）",
-    "放言": "泛綠傾向",
-    "民報": "泛綠／本土派傾向",
 
-    # 泛白／第三勢力或高度關注民眾黨動態
-    "民眾之聲": "泛白傾向（民眾黨官方新媒體）",
-    "匯流新聞網": "偏泛白／第三勢力傾向（CNEWS，高比例報導民眾黨與國會攻防）",
-    "CNEWS": "偏泛白／第三勢力傾向",
+def load_media_rules(path=RULES_FILE):
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"找不到 {os.path.basename(path)}（媒體光譜共用規則檔），請放在 GitHub 專案根目錄、與本程式同一層。"
+        )
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-    # 公媒／通訊社／獨立調查與商業綜合平台（不預設絕對中立，依當篇用詞實質檢驗）
-    "中央社": "公媒／國家通訊社（CNA，以官方公開資訊與平實陳述為主，仍須檢視單篇框架）",
-    "公視新聞網": "公媒／公共媒體（PTS，公共化電視台，仍須檢視單篇選題與引述平衡）",
-    "中央廣播電臺": "公媒／國家廣播電台（央廣）",
-    "央廣": "公媒／國家廣播電台",
-    "報導者": "獨立深度調查媒體（非營利獨立媒體）",
-    "華視": "公媒／公共化媒體",
-    "台視": "商業綜合／傳統老三台",
-    "鏡新聞": "商業綜合／新聞台（仍須依當篇用詞判讀）",
-    "ETtoday": "商業綜合／流量導向（即時快訊與網路輿情為主，立場視議題而定）",
-    "NOWnews": "商業綜合／立場視議題而定",
-    "壹蘋新聞網": "商業綜合／揭弊與民生導向",
-    "菱傳媒": "商業綜合／政壇調查與民調導向",
-    "上報": "商業綜合／政經幕後與國安評論導向",
-    "信傳媒": "商業綜合／財經與政壇觀察導向"
-}
 
-GREEN_KEYS = [
-    "泛綠", "深綠", "偏綠", "自由", "三立", "民視",
-    "新頭殼", "Newtalk", "太報", "鏡週刊", "鏡報", "放言", "民報"
-]
-BLUE_KEYS = [
-    "泛藍", "深藍", "親中", "聯合", "UDN", "udn", "中時", "中國時報",
-    "中天", "TVBS", "風傳媒", "中視", "中廣", "工商", "經濟日報", "梅花"
-]
-WHITE_KEYS = ["泛白", "民眾", "匯流", "CNEWS"]
+MEDIA_RULES = load_media_rules()
+CAMP_LABELS = MEDIA_RULES["camp_labels"]
+AGGREGATOR_BLACKLIST = MEDIA_RULES["aggregator_blacklist"]
+# 名稱長的優先比對，確保「中天新聞網」優先於「中天新聞」、「TVBS新聞網」優先於「TVBS」
+MEDIA_KEYS_LONGEST_FIRST = sorted(MEDIA_RULES["media"].keys(), key=len, reverse=True)
 
 BROWSER_HEADERS = {
     "User-Agent": (
@@ -126,28 +86,49 @@ BROWSER_HEADERS = {
     "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8",
 }
 
+# 共用連線（Session）：重複利用 TCP/TLS 連線，減少 Google／Bing／Gemini 的連線開銷
+SESSION = requests.Session()
+SESSION.headers.update(BROWSER_HEADERS)
+
 
 def is_aggregator(source_name):
     s_lower = (source_name or "").lower()
     return any(b.lower() in s_lower for b in AGGREGATOR_BLACKLIST)
 
 
+def match_media(source_name):
+    """回傳 media_spectrum.json 中「名稱最長」且包含於媒體名稱的那一筆；找不到回傳 None。"""
+    s = source_name or ""
+    for key in MEDIA_KEYS_LONGEST_FIRST:
+        if key in s:
+            return MEDIA_RULES["media"][key]
+    return None
+
+
 def get_media_bias_tag(source_name):
-    for key, bias_desc in MEDIA_SPECTRUM.items():
-        if key in source_name:
-            return bias_desc
-    return "未預設光譜之原生媒體（請依標題與內文用詞直接判定）"
+    m = match_media(source_name)
+    return m["desc"] if m else MEDIA_RULES["default_desc"]
 
 
 def classify_camp_bucket(source_name, bias_tag=""):
-    text = f"{source_name} {bias_tag}"
-    if any(k in text for k in GREEN_KEYS):
-        return "泛綠傾向"
-    if any(k in text for k in BLUE_KEYS):
-        return "泛藍傾向"
-    if any(k in text for k in WHITE_KEYS):
-        return "泛白／第三勢力"
-    return "公媒／通訊社與商業綜合"
+    """與官網 app.py、LINE 機器人 worker.js 同一套規則（bias_tag 參數保留以相容舊呼叫）。"""
+    m = match_media(source_name)
+    if m:
+        return CAMP_LABELS[m["camp"]]
+    s = source_name or ""
+    for camp in ("green", "blue", "white"):
+        if any(k in s for k in MEDIA_RULES["keyword_fallback"][camp]):
+            return CAMP_LABELS[camp]
+    return CAMP_LABELS["neutral"]
+
+
+def parse_pub_date(pub_raw):
+    """RSS pubDate → (台灣時間字串, timestamp)；解析失敗回傳 ("未知時間", 0)。"""
+    try:
+        dt = parsedate_to_datetime(pub_raw).astimezone(TW_TZ)
+        return dt.strftime("%Y-%m-%d %H:%M"), dt.timestamp()
+    except Exception:
+        return "未知時間", 0
 
 
 def unwrap_bing_url(bing_link):
@@ -175,7 +156,7 @@ def fetch_rss(query, max_items=45):
         f"q={encoded}&hl=zh-TW&gl=TW&ceid=TW:zh-Hant"
     )
     try:
-        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=20)
+        resp = SESSION.get(url, timeout=20)
         resp.raise_for_status()
         root = ET.fromstring(resp.content)
     except Exception as e:
@@ -184,23 +165,16 @@ def fetch_rss(query, max_items=45):
 
     articles = []
     for item in root.findall(".//item"):
-        source = item.find("source").text if item.find("source") is not None else "未知媒體"
+        source = (item.findtext("source") or "").strip() or "未知媒體"
         if is_aggregator(source):
             continue
 
-        title = item.find("title").text if item.find("title") is not None else ""
-        link = item.find("link").text if item.find("link") is not None else ""
-        pub_raw = item.find("pubDate").text if item.find("pubDate") is not None else ""
-        try:
-            dt = parsedate_to_datetime(pub_raw).astimezone(TW_TZ)
-            ts_str = dt.strftime("%Y-%m-%d %H:%M")
-            ts_val = dt.timestamp()
-        except Exception:
-            ts_str = "未知時間"
-            ts_val = 0
+        title = item.findtext("title") or ""
+        link = item.findtext("link") or ""
+        ts_str, ts_val = parse_pub_date(item.findtext("pubDate") or "")
 
         articles.append({
-            "source": source.strip(),
+            "source": source,
             "bias_tag": get_media_bias_tag(source),
             "title": title.strip(),
             "link": link.strip(),
@@ -219,7 +193,7 @@ def fetch_bing_rss(query, max_items=25):
     encoded = urllib.parse.quote(query)
     url = f"https://www.bing.com/news/search?q={encoded}&format=rss&mkt=zh-TW&setlang=zh-Hant"
     try:
-        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=15)
+        resp = SESSION.get(url, timeout=15)
         resp.raise_for_status()
         root = ET.fromstring(resp.content)
     except Exception as e:
@@ -245,15 +219,7 @@ def fetch_bing_rss(query, max_items=25):
         raw_link = (item.findtext("link") or "").strip()
         direct_url = unwrap_bing_url(raw_link)
         snippet = clean_html_text(item.findtext("description") or "")[:220]
-        pub_raw = (item.findtext("pubDate") or "").strip()
-
-        try:
-            dt = parsedate_to_datetime(pub_raw).astimezone(TW_TZ)
-            ts_str = dt.strftime("%Y-%m-%d %H:%M")
-            ts_val = dt.timestamp()
-        except Exception:
-            ts_str = "未知時間"
-            ts_val = 0
+        ts_str, ts_val = parse_pub_date((item.findtext("pubDate") or "").strip())
 
         if ts_val > 0 and (now_ts - ts_val) > max_age_sec:
             continue
@@ -335,7 +301,8 @@ def extract_article_excerpt(raw_html, max_chars=MAX_EXCERPT_CHARS):
         raw_html,
         flags=re.IGNORECASE
     )
-    paragraphs = re.findall(r"<p[^>]*>([\s\S]*?)</p>", cleaned, flags=re.IGNORECASE)
+    # 用 <p(?:\s[^>]*)?> 而非 <p[^>]*>，避免誤配 <path>、<picture>、<param> 等標籤
+    paragraphs = re.findall(r"<p(?:\s[^>]*)?>([\s\S]*?)</p>", cleaned, flags=re.IGNORECASE)
     good_lines = []
     total_len = 0
 
@@ -354,17 +321,38 @@ def extract_article_excerpt(raw_html, max_chars=MAX_EXCERPT_CHARS):
     return " ".join(good_lines)[:max_chars].strip()
 
 
+def decode_html_bytes(raw, declared_encoding):
+    """依 HTTP 標頭 → <meta charset> → UTF-8 → Big5 的順序解碼，避免亂碼。"""
+    enc = (declared_encoding or "").lower()
+    if enc and enc != "iso-8859-1":
+        try:
+            return raw.decode(enc, errors="replace")
+        except LookupError:
+            pass
+    m = re.search(rb'charset=["\']?\s*([A-Za-z0-9_\-]+)', raw[:4096], flags=re.IGNORECASE)
+    if m:
+        try:
+            return raw.decode(m.group(1).decode("ascii"), errors="replace")
+        except LookupError:
+            pass
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return raw.decode("big5", errors="replace")
+
+
 def fetch_page_excerpt(url):
     if not url or "news.google.com" in url:
         return ""
     try:
-        resp = requests.get(url, headers=BROWSER_HEADERS, timeout=6, allow_redirects=True)
-        if resp.status_code != 200:
-            return ""
-        # 避免亂碼：若宣告為 ISO-8859-1 則採用 apparent_encoding
-        if not resp.encoding or resp.encoding.lower() == "iso-8859-1":
-            resp.encoding = resp.apparent_encoding or "utf-8"
-        raw_html = resp.text[:180000]
+        # stream=True：只讀前 MAX_PAGE_BYTES，不必把整個大網頁下載完；timeout=(連線逾時, 讀取逾時)
+        with requests.get(url, headers=BROWSER_HEADERS, timeout=(4, 6),
+                          allow_redirects=True, stream=True) as resp:
+            if resp.status_code != 200:
+                return ""
+            raw_bytes = resp.raw.read(MAX_PAGE_BYTES, decode_content=True) or b""
+            declared = resp.encoding
+        raw_html = decode_html_bytes(raw_bytes, declared)
         excerpt = extract_article_excerpt(raw_html, MAX_EXCERPT_CHARS)
         if len(excerpt) >= 80:
             return excerpt
@@ -400,18 +388,39 @@ def enrich_cross_camp_excerpts(articles):
         friendly_rank = 0 if any(d in direct.lower() for d in SCRAPER_FRIENDLY_DOMAINS) else 1
         buckets[camp].append((friendly_rank, idx, a))
 
+    # 每陣營依「友善網域優先、原排序」挑出前幾家不重複媒體作為候選
+    plan = {}
+    for camp, candidates in buckets.items():
+        candidates.sort(key=lambda x: (x[0], x[1]))
+        seen, picked = set(), []
+        for _, _, art in candidates:
+            if art["source"] in seen:
+                continue
+            seen.add(art["source"])
+            picked.append(art)
+            if len(picked) >= MAX_CANDIDATES_PER_CAMP:
+                break
+        plan[camp] = picked
+
+    # 並行抓取所有候選網址（原本逐篇排隊，每篇最多等 6 秒，失敗越多越慢）
+    unique_urls = list(dict.fromkeys(art["direct_url"] for arts in plan.values() for art in arts))
+    page_texts = {}
+    if unique_urls:
+        with ThreadPoolExecutor(max_workers=min(FETCH_WORKERS, len(unique_urls))) as executor:
+            for url, text in zip(unique_urls, executor.map(fetch_page_excerpt, unique_urls)):
+                page_texts[url] = text
+
+    # 依原本的優先順序挑選：每陣營最多 MAX_FULLTEXT_PER_CAMP 篇、總計最多 MAX_FULLTEXT_TOTAL 篇
     excerpts = []
     used_sources = set()
-
-    for camp, candidates in buckets.items():
-        candidates.sort(key=lambda x: x[0])
+    for camp, arts in plan.items():
         picked_in_camp = 0
-        for _, _, art in candidates:
+        for art in arts:
             if len(excerpts) >= MAX_FULLTEXT_TOTAL or picked_in_camp >= MAX_FULLTEXT_PER_CAMP:
                 break
             if art["source"] in used_sources:
                 continue
-            text = fetch_page_excerpt(art["direct_url"])
+            text = page_texts.get(art["direct_url"], "")
             if not text and art.get("snippet"):
                 text = art["snippet"]
             if len(text) >= 60:
@@ -429,44 +438,98 @@ def enrich_cross_camp_excerpts(articles):
     return excerpts
 
 
-def call_gemini(prompt, model=ANALYSIS_MODEL, thinking_budget=0):
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{model}:generateContent?key={API_KEY}"
-    )
-    gen_config = {
-        "temperature": 0.2,
-        "thinkingConfig": {"thinkingBudget": thinking_budget}
-    }
+class GeminiError(RuntimeError):
+    """可重試的 Gemini 錯誤（限流、暫時故障、空白回應）。"""
+
+
+def call_gemini(prompt, model=ANALYSIS_MODEL, thinking_budget=0, max_output_tokens=None):
+    """呼叫 Gemini：金鑰放在 x-goog-api-key 標頭（官方寫法）；限流或暫時錯誤時退避重試。"""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    headers = {"x-goog-api-key": API_KEY, "Content-Type": "application/json"}
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": gen_config
+        "generationConfig": {
+            "temperature": 0.2,
+            "thinkingConfig": {"thinkingBudget": thinking_budget}
+        }
     }
+    if max_output_tokens:
+        payload["generationConfig"]["maxOutputTokens"] = max_output_tokens
 
-    for attempt in range(2):
+    last_err = None
+    for attempt in range(GEMINI_MAX_ATTEMPTS):
         try:
-            resp = requests.post(url, json=payload, timeout=300)
-            resp.raise_for_status()
-            parts = resp.json()["candidates"][0]["content"]["parts"]
+            resp = SESSION.post(url, json=payload, headers=headers, timeout=300)
+            if resp.status_code in (429, 500, 502, 503, 504):
+                raise GeminiError(f"Gemini 暫時無法服務（HTTP {resp.status_code}）：{resp.text[:200]}")
+            if resp.status_code != 200:
+                # 400／403 等設定錯誤，重試也不會好，直接中止
+                raise ValueError(f"Gemini 請求失敗（HTTP {resp.status_code}）：{resp.text[:300]}")
+
+            data = resp.json()
+            candidates = data.get("candidates") or []
+            if not candidates:
+                block = (data.get("promptFeedback") or {}).get("blockReason", "未知")
+                raise GeminiError(f"Gemini 未回傳內容（blockReason={block}）")
+            parts = (candidates[0].get("content") or {}).get("parts") or []
             # 開啟思考模式時自動過濾 thought 內部草稿，僅回傳正式報告本文
             output_texts = [p.get("text", "") for p in parts if not p.get("thought") and p.get("text")]
-            return "\n".join(output_texts).strip()
-        except requests.exceptions.RequestException as e:
-            if attempt == 0:
-                print(f"連線異常，5秒後進行第2次重試... ({e})")
-                time.sleep(5)
-            else:
-                raise
+            text = "\n".join(output_texts).strip()
+            if not text:
+                reason = candidates[0].get("finishReason", "未知")
+                raise GeminiError(f"Gemini 回傳空白內容（finishReason={reason}）")
+            return text
+        except (requests.exceptions.RequestException, GeminiError) as e:
+            last_err = e
+            if attempt < GEMINI_MAX_ATTEMPTS - 1:
+                wait = GEMINI_BACKOFF_SECONDS[min(attempt, len(GEMINI_BACKOFF_SECONDS) - 1)]
+                print(f"Gemini 第 {attempt + 1} 次呼叫失敗，{wait} 秒後重試…（{e}）")
+                time.sleep(wait)
+    raise last_err
 
 
 def load_history():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
+    if not os.path.exists(DATA_FILE):
+        return []
+    # 解析失敗時直接報錯中止：舊版會回傳空清單，接著用 1 期新資料覆蓋掉既有 30 期紀錄
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, list) else []
+
+
+def clean_topic(raw_topic):
+    """清掉引號、括號與 Markdown 符號，只保留前 2 個詞。"""
+    text = re.sub(r"[\"'「」『』【】*#`]", "", raw_topic or "")
+    return " ".join(text.split()[:2])
+
+
+def sanitize_report(text):
+    """清除 AI 暴衝輸出的連續空白（曾單期塞入 200 萬個空白，官網資料膨脹到 11MB），並去除行尾空白。"""
+    text = re.sub(r"[ \t　]{8,}", " ", text or "")
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
+    return text.strip()
+
+
+# 與官網 app.py 解析評分用同一個規則，確保存進去的報告官網一定讀得到分數
+SCORE_PATTERN = r"可靠度評分(?:\s*[\(（][^\)）]*[\)）])?[\*\s]*[：:]\s*\*?(\d{1,3})\s*分"
+
+
+def validate_report(report_md):
+    """回傳問題描述；空字串代表通過。避免把空白或被截斷的報告寫進官網。"""
+    text = (report_md or "").strip()
+    if len(text) < 600:
+        return f"長度僅 {len(text)} 字"
+    for n in ("1", "2", "3"):
+        if not re.search(rf"###\s*{n}\.", text):
+            return f"缺少第 {n} 段（### {n}.）"
+    if not re.search(SCORE_PATTERN, text):
+        return "缺少消息可靠度評分"
+    return ""
+
+
+def period_of(dt):
+    return "早報" if dt.hour < 11 else ("午報" if dt.hour < 17 else "晚報")
 
 
 def main():
@@ -474,6 +537,18 @@ def main():
         raise ValueError("找不到 GEMINI_API_KEY，請確認已在 GitHub Secrets 設定！")
 
     history = load_history()
+
+    # 同一時段只產一份：cron-job.org 與 GitHub 排程都會觸發（曾每個時段各跑兩次、Gemini 費用加倍）
+    started_tw = datetime.now(TW_TZ)
+    current_period = period_of(started_tw)
+    if history and not FORCE_RUN:
+        latest = history[0]
+        if (str(latest.get("date_str", ""))[:10] == started_tw.strftime("%Y-%m-%d")
+                and latest.get("period") == current_period):
+            print(f"⏭️ {started_tw:%Y-%m-%d} {current_period}已有報告（{latest.get('date_str')}），本次略過以免重複。"
+                  "如需重跑，請在 GitHub Actions 手動執行並勾選 force。")
+            return
+
     recent_topics = [item["topic"] for item in history[:3]]
     recent_topics_str = "、".join(recent_topics) if recent_topics else "無"
     print(f"近期已分析過的議題：{recent_topics_str}")
@@ -498,8 +573,16 @@ def main():
 
 請只回傳最終選定的關鍵字，不要加上任何標點符號或解釋文字。
 """
-    raw_topic = call_gemini(topic_prompt, model=TOPIC_MODEL, thinking_budget=0).strip().replace('"', '').replace("'", "")
-    hot_topic = " ".join(raw_topic.split()[:2])
+    hot_topic = ""
+    for _ in range(2):
+        raw_topic = call_gemini(topic_prompt, model=TOPIC_MODEL, thinking_budget=0,
+                                max_output_tokens=TOPIC_MAX_OUTPUT_TOKENS)
+        hot_topic = clean_topic(raw_topic)
+        if hot_topic:
+            break
+        print(f"選題結果無法使用（{raw_topic[:40]!r}），重新選題一次…")
+    if not hot_topic:
+        raise RuntimeError("Gemini 連續兩次未回傳有效議題關鍵字，本次不更新 news_history.json")
     print(f"鎖定本時段分析議題：{hot_topic}")
 
     topic_articles = fetch_topic_articles(hot_topic, pool)
@@ -576,6 +659,7 @@ def main():
 ### 1. 🧭 政黨風向與媒體立場光譜分析
 請結合「預設背景光譜」與「本篇實際標題／內文用詞」，將報導歸類為 **泛綠傾向、泛藍傾向、泛白／第三勢力傾向、公媒／通訊社與商業綜合** 四大類：
 - 請建立一個 Markdown 比較表格，欄位包含：【立場分類】、【本次上榜媒體】、【主打敘事框架與具體引述】、【試圖引導受眾相信的結論】。
+- **表格格式鐵律**：請用最精簡的 Markdown 表格寫法，每個儲存格前後只留 1 個半形空白，**嚴禁用空白補齊欄寬或對齊**，分隔列只寫 `|---|---|---|---|`。
 - **🔍 同一事實，兩邊怎麼切？（敘事框架對照）**：從資料中挑出 1～2 個「同一個數字、法條或當事人原話」，並列呈現藍白媒體與綠營媒體分別怎麼剪輯與詮釋（附上媒體名稱）。
 - **📰 標題 vs. 內文落差抓包**：比對資料二內文與資料一標題，點出是否有「標題情緒激化或斷章取義，但內文原話其實相對平緩／附帶前提條件」的案例（若各家標題皆大致符合內文，請直接誠實註記「本期跨陣營標題大致符合內文原意，未見明顯標題黨扭曲」）。
 - **🧭 風向總評**：2～3 句總結目前是哪一方掌握議題設定權（Agenda Setting）與實質攻防焦點。
@@ -597,15 +681,26 @@ def main():
   - **查證結論**：簡潔區分哪些屬於「已確認事實」，哪些屬於「政黨推論或待查證放話」。
 """
 
-    report_md = call_gemini(
-        analysis_prompt,
-        model=ANALYSIS_MODEL,
-        thinking_budget=ANALYSIS_THINKING_BUDGET
-    )
+    report_md, problem = "", ""
+    for _ in range(2):
+        raw_report = call_gemini(
+            analysis_prompt,
+            model=ANALYSIS_MODEL,
+            thinking_budget=ANALYSIS_THINKING_BUDGET,
+            max_output_tokens=ANALYSIS_MAX_OUTPUT_TOKENS
+        )
+        report_md = sanitize_report(raw_report)
+        if len(raw_report) - len(report_md) > 2000:
+            print(f"⚠️ 偵測到 AI 輸出暴衝空白，已清除 {len(raw_report) - len(report_md):,} 個字元")
+        problem = validate_report(report_md)
+        if not problem:
+            break
+        print(f"報告格式檢查未通過（{problem}），重新產生一次…")
+    else:
+        raise RuntimeError(f"報告連續兩次格式不完整（{problem}），本次不更新 news_history.json，保留上一期內容")
 
     now_tw = datetime.now(TW_TZ)
-    hour = now_tw.hour
-    period = "早報" if hour < 11 else ("午報" if hour < 17 else "晚報")
+    period = current_period  # 以開始執行的時段為準，與上方防重複檢查一致
 
     # 存入 JSON 前清除暫存欄位，維持 news_history.json 輕量高速
     compact_sources = [
@@ -631,11 +726,20 @@ def main():
         "sources": compact_sources
     }
 
+    # 順便清理舊紀錄中 AI 暴衝的空白（官網資料曾因此膨脹到 11MB，拖慢官網與 LINE 機器人）
+    for old_entry in history:
+        if isinstance(old_entry.get("report"), str):
+            old_entry["report"] = sanitize_report(old_entry["report"])
+
     history.insert(0, new_entry)
     history = history[:30]
 
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+    # 先寫暫存檔再替換，避免中途失敗留下壞掉的 JSON（官網與 LINE 機器人都讀這個檔）
+    tmp_path = DATA_FILE + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, DATA_FILE)
+    print(f"✅ 已寫入 {DATA_FILE}（共 {len(history)} 期）")
 
 
 if __name__ == "__main__":
